@@ -138,8 +138,9 @@ node app.js     # 启动本地开发服务
 # 打包全平台单文件二进制
 node build_assets.js  # 编译内嵌静态资产
 npx esbuild app.js --bundle --platform=node --target=node18 --outfile=bundle.cjs --external:sql.js --external:jsonwebtoken --external:bcryptjs
-npx pkg bundle.cjs --target node18-linux-x64 --output serverwatch-linux       # Linux 单文件
-npx pkg bundle.cjs --target node18-win-x64 --output serverwatch-win-x64.exe  # Windows 单文件
+npx pkg bundle.cjs --target node18-linux-x64 --output serverwatch-linux                         # Linux x64 单文件
+npx pkg bundle.cjs --target node18-linux-arm64 --no-bytecode --output serverwatch-linux-arm64 # Linux ARM64 (aarch64) 单文件
+npx pkg bundle.cjs --target node18-win-x64 --output serverwatch-win-x64.exe                    # Windows x64 单文件
 ```
 
 ---

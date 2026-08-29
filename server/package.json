@@ -8,6 +8,8 @@
     "start": "node app",
     "dev": "./node_modules/.bin/nodemon app",
     "build:linux": "npm run bundle && pkg bundle.cjs -t node18-linux-x64 -o serverwatch-linux --public",
+    "build:linux-arm64": "npm run bundle && pkg bundle.cjs -t node18-linux-arm64 --no-bytecode -o serverwatch-linux-arm64 --public",
+    "build:win": "npm run bundle && pkg bundle.cjs -t node18-win-x64 -o serverwatch-win-x64.exe --public",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
