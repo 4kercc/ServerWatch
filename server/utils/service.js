@@ -1,11 +1,13 @@
 const { execSync, spawn } = require('child_process')
 const fs = require('fs')
 const path = require('path')
+const sslManager = require('./ssl')
 
 const SERVICE_NAME = 'serverwatch'
 const SYSTEMD_PATH = `/etc/systemd/system/${SERVICE_NAME}.service`
 const PID_FILE = path.resolve(process.cwd(), 'serverwatch.pid')
 const LOG_FILE = path.resolve(process.cwd(), 'serverwatch.log')
+const CONFIG_PATH = path.resolve(process.cwd(), 'config.json')
 
 function getBinaryPath() {
   return process.execPath || process.argv[0]
@@ -165,6 +167,48 @@ const serviceManager = {
     this.start()
   },
 
+  // 自动化申请 Let's Encrypt 证书并启动/重启服务
+  async handleSsl(domain, action) {
+    if (!domain) {
+      console.error('[-] 缺少域名参数！格式: ./serverwatch-linux ssl <your-domain.com> [start|restart]')
+      return
+    }
+
+    // 1. 验证域名 DNS 指向
+    const isValid = await sslManager.verifyDomain(domain)
+    if (!isValid) {
+      console.error(`[-] 域名 [${domain}] 尚未解析到本机 IP，已终止签发。`)
+      return
+    }
+
+    // 2. 如果当前有服务在运行且可能占用 80 端口，先提示
+    console.log('[*] 准备申请并签发 Let\'s Encrypt 免费 SSL 证书...')
+    const certResult = await sslManager.issueCert(domain)
+    if (!certResult) {
+      console.error('[-] SSL 证书配置未完成。')
+      return
+    }
+
+    // 3. 更新 config.json 开启 ssl 与 domain 配置
+    let cfg = {}
+    if (fs.existsSync(CONFIG_PATH)) {
+      try { cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) } catch (e) {}
+    }
+    cfg.domain = domain
+    cfg.ssl = true
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2))
+    console.log(`[+] 已更新 config.json：开启 SSL HTTPS 模式 (域名: ${domain})`)
+
+    // 4. 执行后续指令 (默认 restart / start)
+    if (action === 'start' || !action) {
+      console.log('[*] 正在启动 ServerWatch HTTPS 服务...')
+      this.enable()
+      this.restart()
+    } else if (action === 'restart') {
+      this.restart()
+    }
+  },
+
   // 查看运行状态
   status() {
     console.log('=====================================================')
@@ -217,14 +261,18 @@ ServerWatch - 现代服务器集群监控运维服务管理工具
   ./${binName} <command>
 
 常用指令:
-  start     启动 ServerWatch 后台服务
-  stop      停止 ServerWatch 服务
-  restart   重启 ServerWatch 服务
-  status    查看 ServerWatch 服务的运行状态与 PID
-  enable    安装并开启 systemd 开机自启
-  disable   禁用 systemd 开机自启
-  run       在前台直接运行 ServerWatch (用于调试/容器/Systemd)
-  help      显示此帮助信息
+  start                     启动 ServerWatch 后台服务
+  stop                      停止 ServerWatch 服务
+  restart                   重启 ServerWatch 服务
+  status                    查看 ServerWatch 服务的运行状态与 PID
+  enable                    安装并开启 systemd 开机自启
+  disable                   禁用 systemd 开机自启
+  ssl <domain> [start]      自动校验域名、签发 Let's Encrypt 证书、开启 HTTPS 并启动
+  run                       在前台直接运行 ServerWatch (用于调试/容器/Systemd)
+  help                      显示此帮助信息
+
+使用示例:
+  ./${binName} ssl mx.mk start   # 自动为 mx.mk 签发证书、配置 HTTPS 与自动续期并后台启动
 `)
   }
 }

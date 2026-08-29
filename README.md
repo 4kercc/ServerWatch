@@ -48,9 +48,9 @@ wget https://github.com/4kercc/ServerWatch/releases/latest/download/serverwatch-
 chmod +x serverwatch-linux
 ```
 
-### 2. 服务运维与开机自启命令
+### 2. 服务运维与一键 Let's Encrypt SSL 配置
 
-`serverwatch-linux` 内置了完整的服务与 systemd 生命周期管理：
+`serverwatch-linux` 内置了完整的服务生命周期、systemd 守护进程与 **Let's Encrypt 域名 SSL 自动化签发/续期** 功能：
 
 ```bash
 # 启动后台服务
@@ -67,6 +67,10 @@ chmod +x serverwatch-linux
 
 # 停止服务
 ./serverwatch-linux stop
+
+# 一键自动化配置域名 SSL 证书 (自动验证 DNS 解析、签发 ECC 证书、开启 HTTPS、配置 60 天自动续期并启动)
+./serverwatch-linux ssl <your-domain.com> start
+# 例如：./serverwatch-linux ssl mx.mk start
 
 # 关闭开机自启
 ./serverwatch-linux disable

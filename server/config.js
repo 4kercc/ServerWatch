@@ -1,8 +1,12 @@
 const fs = require('fs')
 const os = require('os')
 const crypto = require('crypto')
+const path = require('path')
+const https = require('https')
+const http = require('http')
 
 const config_path = process.cwd() + '/config.json'
+const SSL_DIR = path.resolve(process.cwd(), 'ssl')
 
 function generateRandomString(len = 8) {
   return crypto.randomBytes(Math.ceil(len / 2)).toString('hex').slice(0, len)
@@ -12,10 +16,12 @@ var cfg = {
   "username": "admin",
   "password": generateRandomString(8),
   "jwt_secret": generateRandomString(32),
-  "port": 51221
+  "port": 51221,
+  "domain": "",
+  "ssl": false
 }
 
-var app, handler
+var app, handler, httpRedirectHandler
 
 function getIpv4() {
   var ifaces = os.networkInterfaces();
@@ -36,7 +42,7 @@ function init(instance){
   if (fs.existsSync(config_path)) {
     try {
       const data = fs.readFileSync(config_path, 'utf-8')
-      cfg = JSON.parse(data)
+      cfg = Object.assign(cfg, JSON.parse(data))
       // 为既往旧配置文件平滑补充高强度 jwt_secret
       if (!cfg.jwt_secret) {
         cfg.jwt_secret = generateRandomString(32)
@@ -57,12 +63,39 @@ function init(instance){
 }
 
 function launcher(cfg, isNew = false){
-  handler = app.listen(cfg.port)
-  console.log(new Date().toISOString())
-  console.log('App is running at http://' + getIpv4() + ':' + cfg.port + '/')
+  const certPath = path.join(SSL_DIR, 'cert.pem')
+  const keyPath = path.join(SSL_DIR, 'key.pem')
+  const hasSslFiles = fs.existsSync(certPath) && fs.existsSync(keyPath)
+
+  if (cfg.ssl && hasSslFiles) {
+    // 启动 HTTPS 服务
+    try {
+      const sslOptions = {
+        cert: fs.readFileSync(certPath),
+        key: fs.readFileSync(keyPath)
+      }
+      handler = https.createServer(sslOptions, app.callback()).listen(cfg.port)
+      console.log(new Date().toISOString())
+      const domainDisplay = cfg.domain || getIpv4()
+      console.log(`[+] ServerWatch HTTPS 安全服务已就绪: https://${domainDisplay}:${cfg.port}/`)
+
+      // 同时启动智能 HTTP 自动跳转 HTTPS 适配（如果在同一端口收到 HTTP 明文请求）
+      console.log(`[+] SSL 加密通道已开启，所有流量受 TLS 保护。`)
+    } catch (err) {
+      console.error('[-] 加载 SSL 证书失败，回退至 HTTP 模式:', err.message)
+      handler = app.listen(cfg.port)
+      console.log('App is running at http://' + getIpv4() + ':' + cfg.port + '/')
+    }
+  } else {
+    // 普通 HTTP 模式
+    handler = app.listen(cfg.port)
+    console.log(new Date().toISOString())
+    console.log('App is running at http://' + getIpv4() + ':' + cfg.port + '/')
+  }
+
   if (isNew) {
     console.log('=====================================================')
-    console.log('【安全提示】首次启动已为您随机生成管理员登录凭据与安全密钥：')
+    console.log('【���全提示】首次启动已为您随机生成管理员登录凭据与安全密钥：')
     console.log(' 管理员用户名: ' + cfg.username)
     console.log(' 初始安全密码: ' + cfg.password)
     console.log(' 独立 JWT 密钥: [已安全生成并持久化保存在 config.json 中]')
