@@ -13,7 +13,7 @@ function sanitizeForGuest(nodeItem) {
   if (clone.index_id) {
     clone.id = clone.index_id
   }
-  // 脱敏 IP (例: 23.95.253.12 -> 23.95.*.*)
+  // 脱敏 IP (例: 192.168.1.100 -> 192.168.*.*)
   if (clone.ip && typeof clone.ip === 'string') {
     const parts = clone.ip.split('.')
     if (parts.length === 4) {
