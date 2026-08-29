@@ -52,7 +52,16 @@ if (['start', 'stop', 'restart', 'status', 'enable', 'disable', 'help', '-h', '-
 // 正常启动 Web 服务应用 (command 为空或 'run')
 const app = new Koa()
 
-// 自定义优雅错误捕获
+// 1. 全局 HTTP 安全防护 Header 中间件 (防点击劫持、防 MIME 嗅探、防 XSS 攻击)
+app.use(async (ctx, next) => {
+  ctx.set('X-Content-Type-Options', 'nosniff')
+  ctx.set('X-Frame-Options', 'SAMEORIGIN')
+  ctx.set('X-XSS-Protection', '1; mode=block')
+  ctx.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  await next()
+})
+
+// 2. 自定义优雅错误捕获
 app.use(async (ctx, next) => {
   try {
     await next()
@@ -81,7 +90,7 @@ app.use(async (ctx, next) => {
     return next()
   }
 
-  // 1. 命中内嵌打包的静态资源（/assets/* 或 favicon 等）
+  // 命中内嵌打包的静态资源（/assets/* 或 favicon 等）
   const asset = staticAssets[ctx.path]
   if (asset) {
     ctx.type = asset.type

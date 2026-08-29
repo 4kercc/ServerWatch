@@ -83,12 +83,15 @@ crontab -l 2>/dev/null | grep -v "/etc/serverwatch" | grep -v "$SW_DIR" | cronta
 
 mkdir -p "$SW_DIR"
 
-# 6. 获取一次地理位置与 IP 基础元数据
+# 6. 获取一次地理位置与 IP 基础元数据 (带 3 秒严格超时与多源备用解析)
 meta=""
 if [ -n "$(command -v curl)" ]; then
-  meta=$(curl -s --connect-timeout 5 myip.ipip.net -4 2>/dev/null)
+  meta=$(curl -s --connect-timeout 3 --max-time 5 myip.ipip.net -4 2>/dev/null)
+  if [ -z "$meta" ]; then
+    meta=$(curl -s --connect-timeout 3 --max-time 5 https://ipinfo.io/json 2>/dev/null)
+  fi
 elif [ -n "$(command -v wget)" ]; then
-  meta=$(wget -qO- -T 5 myip.ipip.net 2>/dev/null)
+  meta=$(wget -qO- -T 3 -t 1 myip.ipip.net 2>/dev/null)
 fi
 
 wget -O "$SW_DIR/agent.sh" --post-data="data=$(base "$meta")" --no-check-certificate __HOST__ >/dev/null 2>&1

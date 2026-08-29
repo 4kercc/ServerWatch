@@ -160,12 +160,18 @@ module.exports = {
 
   },
 
+  // 探针卸载通知：仅将该节点标记为未安装与离线状态，杜绝通过该无认证接口恶意物理删除节点数据
   async remove(ctx){
     let id = ctx.params.id
-
-    service.removeNodeById( id )
-    
-    ctx.body = 'success'
-
+    if (id && await service.hasNode(id)) {
+      await service.updateNodeById(id, {
+        installed: false,
+        online: false
+      })
+      ctx.body = 'success'
+    } else {
+      ctx.status = 404
+      ctx.body = 'node not found'
+    }
   }
 }

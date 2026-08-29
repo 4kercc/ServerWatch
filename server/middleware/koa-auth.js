@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken')
 const print = require('../utils/print')
+const config = require('../config')
 
 const auth = {
     // 严格鉴权：用于写操作或管理配置 (/api/node/create, /api/node/:id, /api/setting)
@@ -8,7 +9,8 @@ const auth = {
 
         if (token) {
             try {
-                let tokenData = jwt.verify(token, 'yueling')
+                const secret = config.getJwtSecret()
+                let tokenData = jwt.verify(token, secret)
                 if (tokenData && tokenData.exp <= new Date() / 1000) {
                   print.json(ctx, 401, 'invalid token')
                 } else {
@@ -29,7 +31,8 @@ const auth = {
 
         if (token) {
             try {
-                let tokenData = jwt.verify(token, 'yueling')
+                const secret = config.getJwtSecret()
+                let tokenData = jwt.verify(token, secret)
                 if (tokenData && tokenData.exp > new Date() / 1000) {
                   ctx.authData = tokenData
                 }
@@ -39,7 +42,8 @@ const auth = {
     },
 
     create(cnt) {
-      let token = jwt.sign(cnt , 'yueling' , {expiresIn:'7d'})
+      const secret = config.getJwtSecret()
+      let token = jwt.sign(cnt , secret , {expiresIn:'7d'})
       return token
     }
 }

@@ -11,6 +11,7 @@ function generateRandomString(len = 8) {
 var cfg = {
   "username": "admin",
   "password": generateRandomString(8),
+  "jwt_secret": generateRandomString(32),
   "port": 51221
 }
 
@@ -36,12 +37,18 @@ function init(instance){
     try {
       const data = fs.readFileSync(config_path, 'utf-8')
       cfg = JSON.parse(data)
+      // 为既往旧配置文件平滑补充高强度 jwt_secret
+      if (!cfg.jwt_secret) {
+        cfg.jwt_secret = generateRandomString(32)
+        fs.writeFileSync(config_path, JSON.stringify(cfg, null, 2))
+      }
     } catch(e) {}
     launcher(cfg, false)
   } else {
-    // 首次运行：自动随机生成安全管理员账号与密码并持久化保存
+    // 首次运行：自动随机生成安全管理员账号、强密码与独立 JWT 密钥并持久化保存
     cfg.username = 'admin'
     cfg.password = generateRandomString(8)
+    cfg.jwt_secret = generateRandomString(32)
     try {
       fs.writeFileSync(config_path, JSON.stringify(cfg, null, 2))
     } catch(e) {}
@@ -55,9 +62,10 @@ function launcher(cfg, isNew = false){
   console.log('App is running at http://' + getIpv4() + ':' + cfg.port + '/')
   if (isNew) {
     console.log('=====================================================')
-    console.log('【安全提示】首次启动已为您随机生成管理员登录凭据：')
+    console.log('【安全提示】首次启动已为您随机生成管理员登录凭据与安全密钥：')
     console.log(' 管理员用户名: ' + cfg.username)
     console.log(' 初始安全密码: ' + cfg.password)
+    console.log(' 独立 JWT 密钥: [已安全生成并持久化保存在 config.json 中]')
     console.log(' 凭据已保存在 config.json 中，请妥善保管！')
     console.log('=====================================================')
   }
@@ -67,7 +75,16 @@ function data(){
   return cfg
 }
 
+function getJwtSecret() {
+  return cfg.jwt_secret || 'sw_default_secret_' + (cfg.password || 'default')
+}
+
 async function save(d){
+  // 保持原有 jwt_secret
+  if (!d.jwt_secret && cfg.jwt_secret) {
+    d.jwt_secret = cfg.jwt_secret
+  }
+
   let str = JSON.stringify(d, null, 2)
 
   if(d.port != cfg.port && handler){
@@ -93,5 +110,5 @@ async function save(d){
 }
 
 module.exports = {
-  init, data, save, launcher
+  init, data, save, launcher, getJwtSecret
 }
