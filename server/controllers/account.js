@@ -20,6 +20,18 @@ function sleep(ms) {
 }
 
 module.exports = {
+  // 公共公开系统信息 (供未登录前端判断访客模式是否开启)
+  async publicInfo(ctx) {
+    const cfg = config.data()
+    ctx.body = {
+      status: 0,
+      message: '',
+      data: {
+        guest_mode: cfg.guest_mode !== false
+      }
+    }
+  },
+
   async setting( ctx ){
     let result = {
       message: '',
@@ -31,7 +43,7 @@ module.exports = {
   },
 
   async update( ctx , next){
-    let {username , password , port} = ctx.request.body
+    let {username , password , port, guest_mode} = ctx.request.body
     let result = {
       message: '',
       data: null,
@@ -42,13 +54,15 @@ module.exports = {
     if(username) obj.username = username
     if(password) obj.password = password
     if(port) obj.port = port
+    if(typeof guest_mode !== 'undefined') obj.guest_mode = guest_mode === true || guest_mode === 'true' || guest_mode === '1' || guest_mode === 1
 
-    if(obj){
-      let ret = await config.save(obj)
+    if(Object.keys(obj).length > 0){
+      let current = Object.assign({}, config.data(), obj)
+      let ret = await config.save(current)
       if(!ret){
         result.message = '保存失败'
       }else{
-        result.data = {port , username}
+        result.data = {port: current.port, username: current.username, guest_mode: current.guest_mode}
       }
     }
     ctx.body = result

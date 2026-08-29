@@ -7,6 +7,7 @@ const account = require('../controllers/account')
 const node = require('../controllers/node')
 
 const routers = router
+    .get('/info', account.publicInfo)
     .get('/nodes' , node.list)
     .get('/node/:id' , node.query)
     .get('/node/:id/latest' , node.queryLatest)

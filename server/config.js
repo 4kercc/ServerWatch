@@ -18,10 +18,11 @@ var cfg = {
   "jwt_secret": generateRandomString(32),
   "port": 51221,
   "domain": "",
-  "ssl": false
+  "ssl": false,
+  "guest_mode": true // 默认开启访客模式
 }
 
-var app, handler, httpRedirectHandler
+var app, handler
 
 function getIpv4() {
   var ifaces = os.networkInterfaces();
@@ -43,11 +44,14 @@ function init(instance){
     try {
       const data = fs.readFileSync(config_path, 'utf-8')
       cfg = Object.assign(cfg, JSON.parse(data))
-      // 为既往旧配置文件平滑补充高强度 jwt_secret
+      // 为既往旧配置文件平滑补充高强度 jwt_secret 与 guest_mode
       if (!cfg.jwt_secret) {
         cfg.jwt_secret = generateRandomString(32)
-        fs.writeFileSync(config_path, JSON.stringify(cfg, null, 2))
       }
+      if (typeof cfg.guest_mode === 'undefined') {
+        cfg.guest_mode = true
+      }
+      fs.writeFileSync(config_path, JSON.stringify(cfg, null, 2))
     } catch(e) {}
     launcher(cfg, false)
   } else {
@@ -55,6 +59,7 @@ function init(instance){
     cfg.username = 'admin'
     cfg.password = generateRandomString(8)
     cfg.jwt_secret = generateRandomString(32)
+    cfg.guest_mode = true
     try {
       fs.writeFileSync(config_path, JSON.stringify(cfg, null, 2))
     } catch(e) {}
@@ -78,8 +83,6 @@ function launcher(cfg, isNew = false){
       console.log(new Date().toISOString())
       const domainDisplay = cfg.domain || getIpv4()
       console.log(`[+] ServerWatch HTTPS 安全服务已就绪: https://${domainDisplay}:${cfg.port}/`)
-
-      // 同时启动智能 HTTP 自动跳转 HTTPS 适配（如果在同一端口收到 HTTP 明文请求）
       console.log(`[+] SSL 加密通道已开启，所有流量受 TLS 保护。`)
     } catch (err) {
       console.error('[-] 加载 SSL 证书失败，回退至 HTTP 模式:', err.message)
@@ -95,10 +98,11 @@ function launcher(cfg, isNew = false){
 
   if (isNew) {
     console.log('=====================================================')
-    console.log('【���全提示】首次启动已为您随机生成管理员登录凭据与安全密钥：')
+    console.log('【安全提示】首次启动已为您随��生成管理员登录凭据与安全密钥：')
     console.log(' 管理员用户名: ' + cfg.username)
     console.log(' 初始安全密码: ' + cfg.password)
     console.log(' 独立 JWT 密钥: [已安全生成并持久化保存在 config.json 中]')
+    console.log(' 访客模式状态: 已默认开启')
     console.log(' 凭据已保存在 config.json 中，请妥善保管！')
     console.log('=====================================================')
   }
@@ -106,6 +110,10 @@ function launcher(cfg, isNew = false){
 
 function data(){
   return cfg
+}
+
+function isGuestMode() {
+  return cfg.guest_mode !== false
 }
 
 function getJwtSecret() {
@@ -143,5 +151,5 @@ async function save(d){
 }
 
 module.exports = {
-  init, data, save, launcher, getJwtSecret
+  init, data, save, launcher, getJwtSecret, isGuestMode
 }

@@ -1,4 +1,5 @@
 const service = require('./../models/node')
+const config = require('./../config')
 const shortid = require('shortid')
 const _ = require('../utils/_')
 
@@ -45,6 +46,15 @@ module.exports = {
       data: null,
     }
 
+    // 若访客模式关闭且用户未登录，则直接返回 401 提示登录
+    if (!ctx.authData && !config.isGuestMode()) {
+      ctx.status = 401
+      result.status = 401
+      result.message = '访客模式已关闭，请先登录管理员账号'
+      ctx.body = result
+      return
+    }
+
     let data = await service.getNodesWithoutHistory()
     let now = Date.now()
     data.forEach((i) => {
@@ -56,7 +66,7 @@ module.exports = {
     })
     
     // 如果是访客模式 (未登录)：
-    // 1. ��滤掉所有未安装脚本的孤儿/占位节点 (防止被未登录访客看到或滥用)
+    // 1. 过滤掉所有未安装脚本的孤儿/占位节点 (防止被未登录访客看到或滥用)
     // 2. 对已安装节点的敏感信息进行脱敏，并使用 index_id 作为路由 id
     if (!ctx.authData) {
       data = data.filter(n => n.installed).map(sanitizeForGuest)
@@ -136,6 +146,15 @@ module.exports = {
       status: 0,
       message: '',
       data: null,
+    }
+
+    // 若访客模式关闭且用户未登录，则直接返回 401 提示登录
+    if (!ctx.authData && !config.isGuestMode()) {
+      ctx.status = 401
+      result.status = 401
+      result.message = '访客模式已关闭，请先登录管理员账号'
+      ctx.body = result
+      return
     }
 
     let id = ctx.params.id

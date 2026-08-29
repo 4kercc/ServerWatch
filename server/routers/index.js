@@ -6,7 +6,8 @@ const home = require('./home')
 const client = require('./client')
 const authorize = require('../middleware/koa-auth')
 
-// 1. 公开认证接口
+// 1. 公开认证与公共信息接口
+router.get('/api/info', account.publicInfo)
 router.post('/api/signin', account.signin)
 
 // 2. 访客可见接口 (内置 optional 鉴权，支持无 Token 浏览脱敏看板)

@@ -117,7 +117,7 @@ export default function SignIn() {
         </form>
 
         <p className="text-center text-[11px] text-muted-foreground">
-          默认初始凭据：admin / admin
+          凭据保存在服务端 config.json 中
         </p>
 
       </div>

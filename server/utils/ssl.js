@@ -3,8 +3,6 @@ const { execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const https = require('https')
-const http = require('http')
 
 const SSL_DIR = path.resolve(process.cwd(), 'ssl')
 
@@ -74,11 +72,25 @@ async function verifyDomain(domain) {
   })
 }
 
+// 安装必要依赖 (socat / curl)
+function ensureDependencies() {
+  if (!runCmd('which socat || true')) {
+    console.log('[*] 正在安装 socat 端口监听组件...')
+    if (runCmd('which apt-get || true')) {
+      runCmd('apt-get update -y >/dev/null 2>&1 && apt-get install -y socat curl cron >/dev/null 2>&1')
+    } else if (runCmd('which yum || true')) {
+      runCmd('yum install -y socat curl cronie >/dev/null 2>&1')
+    }
+  }
+}
+
 // 使用 acme.sh 自动化签发 Let's Encrypt 证书并设置自动续期
 async function issueCert(domain) {
   if (!fs.existsSync(SSL_DIR)) {
     fs.mkdirSync(SSL_DIR, { recursive: true })
   }
+
+  ensureDependencies()
 
   const certPath = path.join(SSL_DIR, 'cert.pem')
   const keyPath = path.join(SSL_DIR, 'key.pem')
@@ -90,20 +102,24 @@ async function issueCert(domain) {
   const acmeSh = path.join(homeDir, '.acme.sh/acme.sh')
 
   if (!fs.existsSync(acmeSh)) {
-    console.log('[*] 正在安装 acme.sh 自动化证书工具...')
+    console.log('[*] 正在下载并安装 acme.sh 自动化证书工具...')
     runCmd(`curl -s https://get.acme.sh | sh -s email=admin@${domain} >/dev/null 2>&1 || wget -qO- https://get.acme.sh | sh -s email=admin@${domain} >/dev/null 2>&1`)
   }
 
   // 2. 检查 80 端口占用情况，若有冲突先提醒
   const port80Check = runCmd('ss -tulpn | grep ":80 " || true')
   if (port80Check && port80Check.trim()) {
-    console.log('[!] 检测到 80 端口已被占用，将尝试临时挂靠验证...')
+    console.log('[!] 检测到 80 端口已被占用，请确保 80 端口可正常通过 ACME 验证。')
   }
 
-  // 3. 调用 acme.sh 独立 standalone 模式签发证书
+  // 3. 设置默认 CA 为 Let's Encrypt 并签发 ECC 证书
   console.log(`[*] 正在通过 Let's Encrypt CA 签发 ECC 高性能 SSL 证书...`)
+  runCmd(`${acmeSh} --set-default-ca --server letsencrypt >/dev/null 2>&1`)
   const issueCmd = `${acmeSh} --issue -d ${domain} --standalone --keylength ec-256 --force`
-  const issueResult = runCmd(issueCmd)
+  const issueOut = runCmd(issueCmd)
+  if (issueOut) {
+    console.log(issueOut.trim())
+  }
 
   // 4. 将证书安装到项目 ssl/ 目录
   const installCmd = `${acmeSh} --install-cert -d ${domain} --ecc \
@@ -117,7 +133,7 @@ async function issueCert(domain) {
     console.log(`[+] 证书路径: ${certPath}`)
     console.log(`[+] 私钥路径: ${keyPath}`)
 
-    // 5. 配置 acme.sh 自动续期 cron 任务 (acme.sh 会自动写入 crontab，此处再次确保)
+    // 5. 配置 acme.sh 自动续期 cron 任务
     console.log(`[+] 已自动配置 Let's Encrypt 证书 60 天自动续期机制！`)
     return { cert: certPath, key: keyPath }
   } else {

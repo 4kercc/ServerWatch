@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import http from '../lib/http'
-import { Settings, Save, Shield, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react'
+import { Settings, Save, Shield, CheckCircle2, AlertCircle, RefreshCw, Eye, EyeOff } from 'lucide-react'
 
 export default function Setting() {
   const [form, setForm] = useState({
     username: '',
     password: '',
-    port: 51221
+    port: 51221,
+    guest_mode: true
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -21,7 +22,8 @@ export default function Setting() {
           setForm({
             username: res.data.username || 'admin',
             password: res.data.password || '',
-            port: res.data.port || 51221
+            port: res.data.port || 51221,
+            guest_mode: res.data.guest_mode !== false
           })
         }
       } catch (err) {
@@ -43,7 +45,8 @@ export default function Setting() {
       const res = await http.post('/api/setting', {
         username: form.username,
         password: form.password,
-        port: parseInt(form.port) || 51221
+        port: parseInt(form.port) || 51221,
+        guest_mode: form.guest_mode
       })
 
       if (res && res.status === 0) {
@@ -78,7 +81,7 @@ export default function Setting() {
           系统安全与运行设置
         </h1>
         <p className="text-xs text-muted-foreground mt-0.5">
-          修改 Web 控制台登录凭据与服务端口
+          修改 Web 控制台登录凭据、访客访问模式与服务端口
         </p>
       </div>
 
@@ -98,6 +101,39 @@ export default function Setting() {
 
       <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-6 sm:p-8 space-y-5 shadow-sm">
         
+        {/* 访客模式开关 */}
+        <div className="bg-muted/30 p-4 rounded-xl border border-border/60 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {form.guest_mode ? (
+                <Eye className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <EyeOff className="h-4 w-4 text-amber-500" />
+              )}
+              <div>
+                <span className="text-xs font-semibold text-foreground block">
+                  公开访客模式 (Guest Mode)
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {form.guest_mode
+                    ? '开启：未登录访客可直接浏览脱敏仪表盘与节点监控'
+                    : '关闭：禁止未授权访问，打开系统任意页面将自动跳转登录'}
+                </span>
+              </div>
+            </div>
+
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.guest_mode}
+                onChange={(e) => setForm({ ...form, guest_mode: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+        </div>
+
         {/* 用户名 */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-foreground">管理员用户名</label>
@@ -145,7 +181,7 @@ export default function Setting() {
             className="flex items-center gap-1.5 px-5 py-2 bg-primary text-primary-foreground font-semibold text-xs rounded-lg hover:bg-primary/90 transition shadow-sm disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
-            {saving ? '正在保存...' : '保���配置'}
+            {saving ? '正在保存...' : '保存配置'}
           </button>
         </div>
 
