@@ -422,7 +422,7 @@ export default function ServerDetail() {
             <h3>请在待监控服务器上执行安装探针命令</h3>
           </div>
           <p className="text-xs text-muted-foreground">
-            在目标 Linux 主机上运行以下命令（支持 root 或具备 cron 权限的普通用户执行，推荐新建普通用户进行安装）。
+            请以 root 权限在目标 Linux 服务器上执行以下命令（安装脚本将自动创建禁止交互式登录的专属 <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-emerald-400">monitor</code> 隔离系统用户，并通过其个人 crontab 进行数据采集与上报，确保底层系统安全）。
           </p>
 
           <div className="relative">

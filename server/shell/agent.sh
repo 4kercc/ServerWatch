@@ -2,13 +2,14 @@
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/bin
 
-# 智能判断工作目录：root 优先 /etc/serverwatch，普通用户优先 $HOME/.serverwatch
-if [ -f /etc/serverwatch/token.log ]; then
-  SW_DIR="/etc/serverwatch"
-elif [ -f "$HOME/.serverwatch/token.log" ]; then
+# 智能判断工作目录：优先 monitor 用户的隔离目录
+if [ -f "$HOME/.serverwatch/token.log" ]; then
   SW_DIR="$HOME/.serverwatch"
+elif [ -f /home/monitor/.serverwatch/token.log ]; then
+  SW_DIR="/home/monitor/.serverwatch"
+elif [ -f /etc/serverwatch/token.log ]; then
+  SW_DIR="/etc/serverwatch"
 else
-  # 脚本所在目录自适应
   SW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 
@@ -50,7 +51,7 @@ function system ()
   # 进程数
   processes=$(ps axc 2>/dev/null | wc -l)
 
-  # 进程快照
+  # 进程快照 (截取前 15 个活跃进程)
   processes_array="$(ps axc -o uname:12,pcpu,rss,etime,state,cmd --sort=-pcpu,-rss --noheaders --width 120 2>/dev/null | head -n 15)"
   processes_array="$(echo "$processes_array" | grep -v " ps$" | sed 's/ \+ / /g' | sed '/^$/d' | tr "\n" ";")"
 
@@ -140,7 +141,7 @@ function network ()
     connections=$(li $(num "$(netstat -tun 2>/dev/null | tail -n +3 | wc -l)"))
   fi
 
-  ## 当前���动网络接口
+  ## 当前活动网络接口
   nic=$(li "$(ip route get 8.8.8.8 2>/dev/null | grep dev | awk -F'dev' '{ print $2 }' | awk '{ print $1 }')")
   if [ -z "$nic" ]; then
     nic="eth0"
@@ -194,7 +195,7 @@ function load (){
     fi
   fi
 
-  ## 缓存中间状态
+  ## 缓存中间状态 (由 monitor 用户在其自身目录下安全读写)
   echo "$time $cpu $io $idle $rx $tx" > "$SW_DIR/data.log"
 
   rx_gap=$(li $(num "$rx_gap"))
