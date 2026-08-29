@@ -84,14 +84,14 @@ chmod +x serverwatch-linux
 
 ## 💻 客户端探针接入 (Agent Integration)
 
-ServerWatch 客户端探针为纯原生 Linux Shell 脚本，**无需在被控机上安装 Python、Node 或复杂守护进程**，仅依赖系统内置的 `bash`、`cron` 与 `/proc` 文件系统。
+ServerWatch 客户端探针为纯原生 Linux Shell 脚本，**无需在被控机上安装 Python、Node 或复杂守护进程**，仅依赖系统内置的 `bash`、`cron` 与 `/proc` 文件系统，**支持 root 或具备 cron 权限的普通用户执行（推荐新建普通用户安装）**。
 
 1. 进入 ServerWatch 控制台，点击 **【新建节点】**。
-2. 复制生成的专属一键安装命令并在目标 Linux 服务器（支持 CentOS、Debian、Ubuntu、Arch 等）上以 `root` 权限执行：
+2. 复制生成的专属一键安装命令并在目标 Linux 服务器（支持 CentOS、Debian、Ubuntu、Arch 等）上执行：
    ```bash
    wget --no-check-certificate -qO- http://<监控端地址>:51221/client/install/<TOKEN> | bash
    ```
-3. 执行成功后，探针将自动配置 `crontab` 定时任务并开始采集系统指标，控制台将在数秒内显示该节点上线。
+3. 执行成功后，探针将自动配置当前用户的 `crontab` 定时任务并开始采集系统指标，控制台将在数秒内显示该节点上线。
 
 ---
 

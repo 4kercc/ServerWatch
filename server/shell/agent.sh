@@ -1,11 +1,19 @@
 #!/bin/bash
 
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/bin
 
+# 智能判断工作目录：root 优先 /etc/serverwatch，普通用户优先 $HOME/.serverwatch
+if [ -f /etc/serverwatch/token.log ]; then
+  SW_DIR="/etc/serverwatch"
+elif [ -f "$HOME/.serverwatch/token.log" ]; then
+  SW_DIR="$HOME/.serverwatch"
+else
+  # 脚本所在目录自适应
+  SW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 
-if [ -f /etc/serverwatch/token.log ]
-then
-  token=($(cat /etc/serverwatch/token.log))
+if [ -f "$SW_DIR/token.log" ]; then
+  token=($(cat "$SW_DIR/token.log"))
 else
   echo "Error: Token is missing."
   exit 1
@@ -34,22 +42,26 @@ function base ()
 
 function system ()
 {
-  uptime=$(cat /proc/uptime | awk '{ print $1 }')
+  uptime=$(cat /proc/uptime 2>/dev/null | awk '{ print $1 }')
 
   # 会话数
-  sessions=$(who | wc -l)
+  sessions=$(who 2>/dev/null | wc -l)
 
   # 进程数
-  processes=$(ps axc | wc -l)
+  processes=$(ps axc 2>/dev/null | wc -l)
 
-  # 进程
-  processes_array="$(ps axc -o uname:12,pcpu,rss,etime,state,cmd --sort=-pcpu,-rss --noheaders --width 120 | head -n 15)"
+  # 进程快照
+  processes_array="$(ps axc -o uname:12,pcpu,rss,etime,state,cmd --sort=-pcpu,-rss --noheaders --width 120 2>/dev/null | head -n 15)"
   processes_array="$(echo "$processes_array" | grep -v " ps$" | sed 's/ \+ / /g' | sed '/^$/d' | tr "\n" ";")"
 
-  # 已分配文件句柄的数目
-  file_handles=$(cat /proc/sys/fs/file-nr | awk '{ print $1 }')
-  # 文件句柄的最大数目
-  file_handles_limit=$(cat /proc/sys/fs/file-nr | awk '{ print $3 }')
+  # 已分配文件句柄的数目与上限
+  if [ -r /proc/sys/fs/file-nr ]; then
+    file_handles=$(cat /proc/sys/fs/file-nr | awk '{ print $1 }')
+    file_handles_limit=$(cat /proc/sys/fs/file-nr | awk '{ print $3 }')
+  else
+    file_handles=0
+    file_handles_limit=65535
+  fi
 }
 
 # 操作系统
@@ -57,23 +69,18 @@ function os ()
 {
   os_kernel=$(uname -r)
 
-  if ls /etc/*release > /dev/null 2>&1
-  then
-    os_name=$(li "$(cat /etc/*release | grep '^PRETTY_NAME=\|^NAME=\|^DISTRIB_ID=' | awk -F\= '{ print $2 }' | tr -d '"' | tac)")
+  if ls /etc/*release > /dev/null 2>&1; then
+    os_name=$(li "$(cat /etc/*release 2>/dev/null | grep '^PRETTY_NAME=\|^NAME=\|^DISTRIB_ID=' | awk -F\= '{ print $2 }' | tr -d '"' | tac)")
   fi
 
-  if [ -z "$os_name" ]
-  then
-    if [ -e /etc/redhat-release ]
-    then
-      os_name=$(li "$(cat /etc/redhat-release)")
-    elif [ -e /etc/debian_version ]
-    then
-      os_name=$(li "Debian $(cat /etc/debian_version)")
+  if [ -z "$os_name" ]; then
+    if [ -e /etc/redhat-release ]; then
+      os_name=$(li "$(cat /etc/redhat-release 2>/dev/null)")
+    elif [ -e /etc/debian_version ]; then
+      os_name=$(li "Debian $(cat /etc/debian_version 2>/dev/null)")
     fi
 
-    if [ -z "$os_name" ]
-    then
+    if [ -z "$os_name" ]; then
       os_name=$(li "$(uname -s)")
     fi
   fi
@@ -93,24 +100,23 @@ function os ()
 
 function cpu ()
 {
-  cpu_name=$(li "$(cat /proc/cpuinfo | grep 'model name' | awk -F\: '{ print $2 } END { if (!NR) print "N/A" }')")
-  cpu_cores=$(($(cat /proc/cpuinfo | grep 'model name' | awk -F\: '{ print $2 }' | sed -e :a -e '$!N;s/\n/\|/;ta' | tr -cd \| | wc -c)+1))
-  cpu_freq=$(li "$(cat /proc/cpuinfo | grep 'cpu MHz' | awk -F\: '{ print $2 }')")
-
+  cpu_name=$(li "$(cat /proc/cpuinfo 2>/dev/null | grep 'model name' | awk -F\: '{ print $2 } END { if (!NR) print "N/A" }')")
+  cpu_cores=$(($(cat /proc/cpuinfo 2>/dev/null | grep 'model name' | awk -F\: '{ print $2 }' | sed -e :a -e '$!N;s/\n/\|/;ta' | tr -cd \| | wc -c)+1))
+  cpu_freq=$(li "$(cat /proc/cpuinfo 2>/dev/null | grep 'cpu MHz' | awk -F\: '{ print $2 }')")
 }
 
 # RAM
 function ram ()
 {
-  ram_total=$(li $(num "$(cat /proc/meminfo | grep ^MemTotal: | awk '{ print $2 }')"))
-  ram_free=$(li $(num "$(cat /proc/meminfo | grep ^MemFree: | awk '{ print $2 }')"))
-  ram_cached=$(li $(num "$(cat /proc/meminfo | grep ^Cached: | awk '{ print $2 }')"))
-  ram_buffers=$(li $(num "$(cat /proc/meminfo | grep ^Buffers: | awk '{ print $2 }')"))
+  ram_total=$(li $(num "$(cat /proc/meminfo 2>/dev/null | grep ^MemTotal: | awk '{ print $2 }')"))
+  ram_free=$(li $(num "$(cat /proc/meminfo 2>/dev/null | grep ^MemFree: | awk '{ print $2 }')"))
+  ram_cached=$(li $(num "$(cat /proc/meminfo 2>/dev/null | grep ^Cached: | awk '{ print $2 }')"))
+  ram_buffers=$(li $(num "$(cat /proc/meminfo 2>/dev/null | grep ^Buffers: | awk '{ print $2 }')"))
   ram_usage=$((($ram_total-($ram_free+$ram_cached+$ram_buffers))*1024))
   ram_total=$(($ram_total*1024))
 
-  swap_total=$(li $(num "$(cat /proc/meminfo | grep ^SwapTotal: | awk '{ print $2 }')"))
-  swap_free=$(li $(num "$(cat /proc/meminfo | grep ^SwapFree: | awk '{ print $2 }')"))
+  swap_total=$(li $(num "$(cat /proc/meminfo 2>/dev/null | grep ^SwapTotal: | awk '{ print $2 }')"))
+  swap_free=$(li $(num "$(cat /proc/meminfo 2>/dev/null | grep ^SwapFree: | awk '{ print $2 }')"))
   swap_usage=$((($swap_total-$swap_free)*1024))
   swap_total=$(($swap_total*1024))
 }
@@ -118,84 +124,78 @@ function ram ()
 # 磁盘
 function disk ()
 {
-  disk_total=$(li $(num "$(($(df -P -B 1 | grep '^/' | awk '{ print $2 }' | sed -e :a -e '$!N;s/\n/+/;ta')))"))
-  disk_usage=$(li $(num "$(($(df -P -B 1 | grep '^/' | awk '{ print $3 }' | sed -e :a -e '$!N;s/\n/+/;ta')))"))
+  disk_total=$(li $(num "$(($(df -P -B 1 2>/dev/null | grep '^/' | awk '{ print $2 }' | sed -e :a -e '$!N;s/\n/+/;ta')))"))
+  disk_usage=$(li $(num "$(($(df -P -B 1 2>/dev/null | grep '^/' | awk '{ print $3 }' | sed -e :a -e '$!N;s/\n/+/;ta')))"))
 
-  ## 所有磁盘
-  disk_array=$(li "$(df -P -B 1 | grep '^/' | awk '{ print $1" "$2" "$3";" }' | sed -e :a -e '$!N;s/\n/ /;ta' | awk '{ print $0 } END { if (!NR) print "N/A" }')")
+  ## 所有挂载磁盘列表
+  disk_array=$(li "$(df -P -B 1 2>/dev/null | grep '^/' | awk '{ print $1" "$2" "$3";" }' | sed -e :a -e '$!N;s/\n/ /;ta' | awk '{ print $0 } END { if (!NR) print "N/A" }')")
 }
 
 function network ()
 {
   ## 活动链接
-  if [ -n "$(command -v ss)" ]
-  then
-    connections=$(li $(num "$(ss -tun | tail -n +2 | wc -l)"))
+  if [ -n "$(command -v ss)" ]; then
+    connections=$(li $(num "$(ss -tun 2>/dev/null | tail -n +2 | wc -l)"))
   else
-    ### netstat 效率低
-    connections=$(li $(num "$(netstat -tun | tail -n +3 | wc -l)"))
+    connections=$(li $(num "$(netstat -tun 2>/dev/null | tail -n +3 | wc -l)"))
   fi
 
-  ## 当前活动网络接口
-  nic=$(li "$(ip route get 8.8.8.8 | grep dev | awk -F'dev' '{ print $2 }' | awk '{ print $1 }')")
-
-  ## 内部检测到的ipv4 真云检测不到实际ip
-  ipv4=$(li "$(ip addr show $nic | grep 'inet ' | awk '{ print $2 }' | awk -F\/ '{ print $1 }' | grep -v '^127' | awk '{ print $0 } END { if (!NR) print "N/A" }')")
-  ipv6=$(li "$(ip addr show $nic | grep 'inet6 ' | awk '{ print $2 }' | awk -F\/ '{ print $1 }' | grep -v '^::' | grep -v '^0000:' | grep -v '^fe80:' | awk '{ print $0 } END { if (!NR) print "N/A" }')")
-
-
-  if [ -d /sys/class/net/$nic/statistics ]
-  then
-    rx=$(li $(num "$(cat /sys/class/net/$nic/statistics/rx_bytes)"))
-    tx=$(li $(num "$(cat /sys/class/net/$nic/statistics/tx_bytes)"))
-  else
-    rx=$(li $(num "$(ip -s link show $nic | grep '[0-9]*' | grep -v '[A-Za-z]' | awk '{ print $1 }' | sed -n '1 p')"))
-    tx=$(li $(num "$(ip -s link show $nic | grep '[0-9]*' | grep -v '[A-Za-z]' | awk '{ print $1 }' | sed -n '2 p')"))
+  ## 当前���动网络接口
+  nic=$(li "$(ip route get 8.8.8.8 2>/dev/null | grep dev | awk -F'dev' '{ print $2 }' | awk '{ print $1 }')")
+  if [ -z "$nic" ]; then
+    nic="eth0"
   fi
 
+  ## IPv4 / IPv6
+  ipv4=$(li "$(ip addr show $nic 2>/dev/null | grep 'inet ' | awk '{ print $2 }' | awk -F\/ '{ print $1 }' | grep -v '^127' | awk '{ print $0 } END { if (!NR) print "N/A" }')")
+  ipv6=$(li "$(ip addr show $nic 2>/dev/null | grep 'inet6 ' | awk '{ print $2 }' | awk -F\/ '{ print $1 }' | grep -v '^::' | grep -v '^0000:' | grep -v '^fe80:' | awk '{ print $0 } END { if (!NR) print "N/A" }')")
+
+  if [ -d "/sys/class/net/$nic/statistics" ]; then
+    rx=$(li $(num "$(cat /sys/class/net/$nic/statistics/rx_bytes 2>/dev/null)"))
+    tx=$(li $(num "$(cat /sys/class/net/$nic/statistics/tx_bytes 2>/dev/null)"))
+  else
+    rx=$(li $(num "$(ip -s link show $nic 2>/dev/null | grep '[0-9]*' | grep -v '[A-Za-z]' | awk '{ print $1 }' | sed -n '1 p')"))
+    tx=$(li $(num "$(ip -s link show $nic 2>/dev/null | grep '[0-9]*' | grep -v '[A-Za-z]' | awk '{ print $1 }' | sed -n '2 p')"))
+  fi
 }
 
 function load (){
-  loadavg=$(li "$(cat /proc/loadavg | awk '{ print $1" "$2" "$3 }')")
+  loadavg=$(li "$(cat /proc/loadavg 2>/dev/null | awk '{ print $1" "$2" "$3 }')")
 
-  
   time=$(date +%s)
-  stat=($(cat /proc/stat | head -n1 | sed 's/[^0-9 ]*//g' | sed 's/^ *//'))
+  stat=($(cat /proc/stat 2>/dev/null | head -n1 | sed 's/[^0-9 ]*//g' | sed 's/^ *//'))
   cpu=$((${stat[0]}+${stat[1]}+${stat[2]}+${stat[3]}))
   io=$((${stat[3]}+${stat[4]}))
   idle=${stat[3]}
 
-  if [ -e /etc/serverwatch/data.log ]
-  then
-    data=($(cat /etc/serverwatch/data.log))
+  if [ -e "$SW_DIR/data.log" ]; then
+    data=($(cat "$SW_DIR/data.log" 2>/dev/null))
     interval=$(($time-${data[0]}))
-    cpu_gap=$(($cpu-${data[1]}))
-    io_gap=$(($io-${data[2]}))
-    idle_gap=$(($idle-${data[3]}))
+    if [ "$interval" -gt 0 ]; then
+      cpu_gap=$(($cpu-${data[1]}))
+      io_gap=$(($io-${data[2]}))
+      idle_gap=$(($idle-${data[3]}))
 
-    if [[ $cpu_gap > "0" ]]
-    then
-      load_cpu=$(((1000*($cpu_gap-$idle_gap)/$cpu_gap+5)/10))
-    fi
+      if [[ $cpu_gap > "0" ]]; then
+        load_cpu=$(((1000*($cpu_gap-$idle_gap)/$cpu_gap+5)/10))
+      fi
 
-    if [[ $io_gap > "0" ]]
-    then
-      load_io=$(((1000*($io_gap-$idle_gap)/$io_gap+5)/10))
-    fi
+      if [[ $io_gap > "0" ]]; then
+        load_io=$(((1000*($io_gap-$idle_gap)/$io_gap+5)/10))
+      fi
 
-    if [[ $rx > ${data[4]} ]]
-    then
-      rx_gap=$((($rx-${data[4]})/$interval))
-    fi
+      if [[ $rx > ${data[4]} ]]; then
+        rx_gap=$((($rx-${data[4]})/$interval))
+      fi
 
-    if [[ $tx > ${data[5]} ]]
-    then
-      tx_gap=$((($tx-${data[5]})/$interval))
+      if [[ $tx > ${data[5]} ]]; then
+        tx_gap=$((($tx-${data[5]})/$interval))
+      fi
     fi
   fi
 
-  ## 缓存
-  echo "$time $cpu $io $idle $rx $tx" > /etc/serverwatch/data.log
+  ## 缓存中间状态
+  echo "$time $cpu $io $idle $rx $tx" > "$SW_DIR/data.log"
 
   rx_gap=$(li $(num "$rx_gap"))
   tx_gap=$(li $(num "$tx_gap"))
@@ -205,31 +205,18 @@ function load (){
 
 function update ()
 {
-  data_post="token=${token[0]}&data=$(base "$uptime") $(base "$sessions") $(base "$processes") $(base "$processes_array") $(base "$file_handles") $(base "$file_handles_limit") $(base "$os_kernel") $(base "$os_name") $(base "$os_arch") $(base "$cpu_name") $(base "$cpu_cores") $(base "$cpu_freq") $(base "$ram_total") $(base "$ram_usage") $(base "$swap_total") $(base "$swap_usage") $(base "$disk_array") $(base "$disk_total") $(base "$disk_usage") $(base "$connections") $(base "$nic") $(base "$ipv4") $(base "$ipv6") $(base "$rx") $(base "$tx") $(base "$rx_gap") $(base "$tx_gap") $(base "$loadavg") $(base "$load_cpu") $(base "$load_io"))"
+  data_post="token=${token[0]}&data=$(base "$uptime") $(base "$sessions") $(base "$processes") $(base "$processes_array") $(base "$file_handles") $(base "$file_handles_limit") $(base "$os_kernel") $(base "$os_name") $(base "$os_arch") $(base "$cpu_name") $(base "$cpu_cores") $(base "$cpu_freq") $(base "$ram_total") $(base "$ram_usage") $(base "$swap_total") $(base "$swap_usage") $(base "$disk_array") $(base "$disk_total") $(base "$disk_usage") $(base "$connections") $(base "$nic") $(base "$ipv4") $(base "$ipv6") $(base "$rx") $(base "$tx") $(base "$rx_gap") $(base "$tx_gap") $(base "$loadavg") $(base "$load_cpu") $(base "$load_io")"
 
-  #上传数据
-  if [ -n "$(command -v timeout)" ]
-  then
-    timeout -s SIGKILL 30 wget -q -o /dev/null -O /etc/serverwatch/agent.log -T 25 --post-data "$data_post" --no-check-certificate "__HOST__"
+  # 上传数据 (优先 curl，备用 wget)
+  if [ -n "$(command -v curl)" ]; then
+    curl -s --max-time 15 -d "$data_post" -k "__HOST__" > "$SW_DIR/agent.log" 2>&1
   else
-    wget -q -o /dev/null -O /etc/serverwatch/agent.log -T 25 --post-data "$data_post" --no-check-certificate "__HOST__"
-    wget_pid=$!
-    wget_counter=0
-    wget_timeout=30
-
-    while kill -0 "$wget_pid" && (( wget_counter < wget_timeout ))
-    do
-        sleep 1
-        (( wget_counter++ ))
-    done
-
-    kill -0 "$wget_pid" && kill -s SIGKILL "$wget_pid"
+    wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "$data_post" --no-check-certificate "__HOST__"
   fi
 }
 
 function main ()
 {
-
   system
   os
   cpu
@@ -242,4 +229,4 @@ function main ()
 
 main
 
-exit 1
+exit 0
