@@ -1,22 +1,32 @@
 const router = require('koa-router')()
 
-const api = require('./api')
-
+const account = require('../controllers/account')
+const node = require('../controllers/node')
 const home = require('./home')
-
-const signin = require('./signin')
-
 const client = require('./client')
+const authorize = require('../middleware/koa-auth')
 
-const authorize = require('../middleware/koa-auth').check
+// 1. 公开认证接口
+router.post('/api/signin', account.signin)
 
-router.use('/api', signin.routes(), signin.allowedMethods())
+// 2. 访客可见接口 (内置 optional 鉴权，支持无 Token 浏览脱敏看板)
+router.get('/api/nodes', authorize.optional, node.list)
+router.get('/api/node/:id', authorize.optional, node.query)
+router.get('/api/node/:id/latest', authorize.optional, node.queryLatest)
 
-//token 验证
-router.use('/api', authorize, api.routes(), api.allowedMethods())
+// 3. 受保护的管理操作接口 (必须 Token 严格鉴权)
+router.get('/api/node/:id/base', authorize.check, node.queryBase)
+router.post('/api/node/create', authorize.check, node.create)
+router.post('/api/node/:id', authorize.check, node.update)
+router.post('/api/node/:id/remove', authorize.check, node.remove)
+router.get('/api/node/:id/remove', authorize.check, node.remove)
+router.get('/api/setting', authorize.check, account.setting)
+router.post('/api/setting', authorize.check, account.update)
 
-router.use('/client',client.routes(),client.allowedMethods())
+// 4. 探针客户端路由
+router.use('/client', client.routes(), client.allowedMethods())
 
+// 5. 首页与 SPA 前端路由分发
 router.use(home.routes(), home.allowedMethods())
 
 module.exports = router

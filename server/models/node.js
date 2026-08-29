@@ -1,81 +1,302 @@
-const dbUtils = require('./../utils/db/lowdb')
+const sqlite = require('../utils/db/sqlite')
 
-// 节点服务
+function parseNodeRow(row) {
+  if (!row) return null
+  let snapshot = {}
+  try {
+    snapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : (row.snapshot || {})
+  } catch (e) {
+    snapshot = {}
+  }
+  return {
+    id: row.id,
+    index_id: row.index_id || 1,
+    label: row.label,
+    ip: row.ip,
+    location: row.location,
+    isp: row.isp,
+    remark: row.remark,
+    installed: !!row.installed,
+    online: !!row.online,
+    time_response: row.time_response,
+    time_record: row.time_record,
+    update_interval: row.update_interval || 5,
+    record_interval: row.record_interval || 60,
+    record_limit: row.record_limit || 1440,
+    recordable: true, // 默认开启时序历史归档
+    snapshot: snapshot
+  }
+}
+
+// 节点数据持久层
 const node = {
-  
-  async getNodes (page , limit){
-    return dbUtils.get('nodes').slice(page * limit , (page+1) * limit).value()
-  },
-  async getNodesWithoutHistory(){
-    return dbUtils.get('nodes').pickout('history').value()
+  async getNodes(page, limit) {
+    await sqlite.init()
+    const rows = sqlite.queryAll('SELECT * FROM nodes ORDER BY index_id ASC, created_at ASC LIMIT ? OFFSET ?', [limit, page * limit])
+    return rows.map(parseNodeRow)
   },
 
-  async createNode (data){
-    dbUtils.get('nodes').push(data).write()
+  async getNodesWithoutHistory() {
+    await sqlite.init()
+    const rows = sqlite.queryAll('SELECT * FROM nodes ORDER BY index_id ASC, created_at ASC')
+    return rows.map(parseNodeRow)
   },
 
-
-  async getNodesCount (){
-    return dbUtils.get('nodes').size().value() || 0
+  async getNextIndexId() {
+    await sqlite.init()
+    const maxRow = sqlite.queryOne('SELECT MAX(index_id) as max_id FROM nodes')
+    return (maxRow && maxRow.max_id) ? (parseInt(maxRow.max_id) + 1) : 1
   },
 
-  async getNodeById(id){
-    return dbUtils.get('nodes').find({id:id}).cloneDeep().value()
+  async createNode(data) {
+    await sqlite.init()
+    const recordIntervalVal = data.record_interval || 60
+    const recordLimitVal = data.record_limit || 1440 // 默认 1440 条 (按 60s/条 恰好 24 小时)
+    const nextIndex = data.index_id || await this.getNextIndexId()
+
+    const params = [
+      data.id,
+      nextIndex,
+      data.label || '',
+      data.ip || '',
+      data.location || '',
+      data.isp || '',
+      data.remark || '',
+      data.installed ? 1 : 0,
+      data.online ? 1 : 0,
+      data.time_response || 0,
+      data.time_record || 0,
+      data.update_interval || 5,
+      recordIntervalVal,
+      recordLimitVal,
+      1, // 强制默认开启历史入库
+      JSON.stringify(data.snapshot || {}),
+      Date.now()
+    ]
+    sqlite.execute(`
+      INSERT INTO nodes (
+        id, index_id, label, ip, location, isp, remark, installed, online,
+        time_response, time_record, update_interval, record_interval,
+        record_limit, recordable, snapshot, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, params)
+    data.index_id = nextIndex
+    return data
   },
 
-  async getNodeSnapshotById(id){
-    return dbUtils.get('nodes').find({id:id}).value().snapshot
+  async getNodesCount() {
+    await sqlite.init()
+    const res = sqlite.queryOne('SELECT count(*) as total FROM nodes')
+    return res ? res.total : 0
   },
 
-  async hasNode(id){
-    return !!dbUtils.get('nodes').find({id:id}).value()
-  },
-
-  async updateNodeById(id , data){
-    return dbUtils.get('nodes')
-      .find({ id : id})
-      .assign(data)
-      .write()
-  },
-
-  async removeNodeById(id){
-    return dbUtils.get('nodes')
-    .remove({ id })
-    .write()
-  },
-
-  async record(id , data){
-    let doc = dbUtils.get('nodes')
-      .find({ id : id})
-      .value()
-
-    if(doc == undefined){
-      return 'error'
+  // 支持按数字索引 index_id (如 1, 2, 3) 或 原始 token id (如 C0rc5JK2v) 查询
+  async getNodeById(idOrIndex) {
+    await sqlite.init()
+    let row = null
+    const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
+    if (isNumeric) {
+      row = sqlite.queryOne('SELECT * FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
     }
+    if (!row) {
+      row = sqlite.queryOne('SELECT * FROM nodes WHERE id = ?', [String(idOrIndex)])
+    }
+    if (!row) return null
+
+    const result = parseNodeRow(row)
+    const realId = row.id
     
-    let { record_interval , record_limit } = doc
+    // 查询最近的时序历史数据（按时间升序，最多支持 7 天 10080 个点）
+    const historyRows = sqlite.queryAll(`
+      SELECT data FROM node_history 
+      WHERE node_id = ? 
+      ORDER BY timestamp ASC 
+      LIMIT 10080
+    `, [realId])
 
-    let curTime = Date.now()
+    result.history = historyRows.map(h => {
+      try {
+        return JSON.parse(h.data)
+      } catch (e) {
+        return {}
+      }
+    })
+    return result
+  },
 
-    let lastSaveTime = doc.time_record
-    
+  async getNodeSnapshotById(idOrIndex) {
+    await sqlite.init()
+    let row = null
+    const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
+    if (isNumeric) {
+      row = sqlite.queryOne('SELECT snapshot FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
+    }
+    if (!row) {
+      row = sqlite.queryOne('SELECT snapshot FROM nodes WHERE id = ?', [String(idOrIndex)])
+    }
+    if (!row) return null
+    try {
+      return typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : (row.snapshot || {})
+    } catch (e) {
+      return {}
+    }
+  },
 
-    //一分钟保存一次历史记录
-    if(doc.recordable && curTime - lastSaveTime > record_interval * 1000){
+  async hasNode(idOrIndex) {
+    await sqlite.init()
+    let row = null
+    const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
+    if (isNumeric) {
+      row = sqlite.queryOne('SELECT id FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
+    }
+    if (!row) {
+      row = sqlite.queryOne('SELECT id FROM nodes WHERE id = ?', [String(idOrIndex)])
+    }
+    return !!row
+  },
 
-      dbUtils.get('nodes')
-      .record({ id : id} , 'history' , data , record_limit)
-      .write()
+  async updateNodeById(idOrIndex, data) {
+    await sqlite.init()
+    let row = null
+    const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
+    if (isNumeric) {
+      row = sqlite.queryOne('SELECT * FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
+    }
+    if (!row) {
+      row = sqlite.queryOne('SELECT * FROM nodes WHERE id = ?', [String(idOrIndex)])
+    }
+    if (!row) return null
 
+    const realId = row.id
+    const current = parseNodeRow(row)
+    const merged = Object.assign({}, current, data)
+
+    sqlite.execute(`
+      UPDATE nodes SET
+        label = ?,
+        ip = ?,
+        location = ?,
+        isp = ?,
+        remark = ?,
+        installed = ?,
+        online = ?,
+        time_response = ?,
+        time_record = ?,
+        update_interval = ?,
+        record_interval = ?,
+        record_limit = ?,
+        recordable = 1,
+        snapshot = ?
+      WHERE id = ?
+    `, [
+      merged.label || '',
+      merged.ip || '',
+      merged.location || '',
+      merged.isp || '',
+      merged.remark || '',
+      merged.installed ? 1 : 0,
+      merged.online ? 1 : 0,
+      merged.time_response || 0,
+      merged.time_record || 0,
+      merged.update_interval || 5,
+      merged.record_interval || 60,
+      merged.record_limit || 1440,
+      JSON.stringify(merged.snapshot || {}),
+      realId
+    ])
+
+    if (data.history && Array.isArray(data.history) && data.history.length === 0) {
+      sqlite.execute('DELETE FROM node_history WHERE node_id = ?', [realId])
+    }
+
+    return merged
+  },
+
+  async removeNodeById(idOrIndex) {
+    await sqlite.init()
+    let row = null
+    const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
+    if (isNumeric) {
+      row = sqlite.queryOne('SELECT id FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
+    }
+    if (!row) {
+      row = sqlite.queryOne('SELECT id FROM nodes WHERE id = ?', [String(idOrIndex)])
+    }
+    if (!row) return false
+
+    const realId = row.id
+    sqlite.execute('DELETE FROM node_history WHERE node_id = ?', [realId])
+    sqlite.execute('DELETE FROM nodes WHERE id = ?', [realId])
+    return true
+  },
+
+  async record(idOrIndex, data) {
+    await sqlite.init()
+    let row = null
+    const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
+    if (isNumeric) {
+      row = sqlite.queryOne('SELECT id, record_interval, record_limit, time_record, ip, location, isp FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
+    }
+    if (!row) {
+      row = sqlite.queryOne('SELECT id, record_interval, record_limit, time_record, ip, location, isp FROM nodes WHERE id = ?', [String(idOrIndex)])
+    }
+    if (!row) return 'error'
+
+    const realId = row.id
+    const record_interval = row.record_interval || 60
+    const record_limit = row.record_limit || 1440 // 默认保持 24 小时数据
+    const curTime = Date.now()
+    let lastSaveTime = row.time_record || 0
+
+    // 默认开启历史入库：达到采样周期或首次接入时，自动归档一条时序记录到 SQLite
+    if (curTime - lastSaveTime >= record_interval * 1000 || lastSaveTime === 0) {
+      sqlite.execute('INSERT INTO node_history (node_id, timestamp, data) VALUES (?, ?, ?)', [
+        realId,
+        curTime,
+        JSON.stringify(data)
+      ])
       lastSaveTime = curTime
+
+      // 历史队列滑动窗口截断，超出上限自动清理早期数据
+      const countRes = sqlite.queryOne('SELECT count(*) as count FROM node_history WHERE node_id = ?', [realId])
+      if (countRes && countRes.count > record_limit) {
+        const toDelete = Math.max(1, Math.round(record_limit / 10))
+        sqlite.execute(`
+          DELETE FROM node_history WHERE id IN (
+            SELECT id FROM node_history WHERE node_id = ? ORDER BY timestamp ASC LIMIT ?
+          )
+        `, [realId, toDelete])
+      }
     }
 
+    // 更新实时快照
+    const finalIp = row.ip || data.ipv4 || ''
+    const finalLoc = row.location || data.location || ''
+    const finalIsp = row.isp || data.isp || ''
 
-    dbUtils.get('nodes')
-      .find({ id : id})
-      .assign({snapshot:data , time_record : lastSaveTime, time_response:curTime})
-      .write()
+    sqlite.execute(`
+      UPDATE nodes SET
+        snapshot = ?,
+        time_record = ?,
+        time_response = ?,
+        online = 1,
+        installed = 1,
+        ip = ?,
+        location = ?,
+        isp = ?,
+        recordable = 1
+      WHERE id = ?
+    `, [
+      JSON.stringify(data),
+      lastSaveTime,
+      curTime,
+      finalIp,
+      finalLoc,
+      finalIsp,
+      realId
+    ])
 
+    return true
   }
 }
 

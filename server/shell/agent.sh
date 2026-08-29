@@ -1,6 +1,4 @@
 #!/bin/bash
-#
-# Ref. https://github.com/nodequery/nq-agent
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -155,16 +153,6 @@ function network ()
     tx=$(li $(num "$(ip -s link show $nic | grep '[0-9]*' | grep -v '[A-Za-z]' | awk '{ print $1 }' | sed -n '2 p')"))
   fi
 
-
-  # 回程延迟
-  ## 广州电信
-  #ping_cu=$(ping -c 2 -w 2 14.215.116.1 | grep rtt | cut -d'/' -f4 | awk '{ print $3 }')
-  ## 上海移动
-  #ping_cm=$(ping -c 2 -w 2 183.192.160.3 | grep rtt | cut -d'/' -f4 | awk '{ print $3 }')
-  ## 重庆联通
-  #ping_ct=$(ping -c 2 -w 2 113.207.32.65 | grep rtt | cut -d'/' -f4 | awk '{ print $3 }')
-  ## 北京教育网
-  #ping_edu=$(ping -c 2 -w 2 202.205.6.30 | grep rtt | cut -d'/' -f4 | awk '{ print $3 }')
 }
 
 function load (){

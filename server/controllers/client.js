@@ -3,6 +3,7 @@ const fs = require('fs')
 const _ = require('../utils/_')
 const format = require('../utils/format')
 const path = require('path')
+const staticData = require('../static_assets')
 
 const createInterval = (v)=>{
   if(/\*/.test(v)){
@@ -10,6 +11,26 @@ const createInterval = (v)=>{
   }else{
     return '("* * * * * sleep '+ new Array(Math.floor(60 / v)).fill(0).map((_,j)=>(j * v)).join(';" "* * * * * sleep ') + '")'
   }
+}
+
+function getShellContent(name) {
+  let content = ''
+  if (staticData && staticData.shellScripts && staticData.shellScripts[name]) {
+    content = staticData.shellScripts[name]
+  } else {
+    const searchPaths = [
+      path.join(__dirname, '../shell', name),
+      path.resolve(process.cwd(), 'shell', name)
+    ]
+    for (const p of searchPaths) {
+      if (fs.existsSync(p)) {
+        content = fs.readFileSync(p, 'utf8')
+        break
+      }
+    }
+  }
+  // 确保输出至 Linux 客户端执行的脚本 100% 过滤掉 Windows \r 回车符
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 }
 
 module.exports = {
@@ -20,27 +41,27 @@ module.exports = {
 
     let interval = 5
 
-    
-
     if(id){
       let obj = await service.getNodeById(id)
       if(obj){
-        let sh = fs.readFileSync(path.join(__dirname, '../shell/install.sh'),'utf-8')
+        let sh = getShellContent('install.sh')
 
         let host = ctx.origin + '/client/agent/' + id
 
-        let update_interval = obj.update_interval
+        let update_interval = obj.update_interval || 5
 
         sh = sh.replace(/__HOST__/g , host)
               .replace('__TOKEN__',id)
-              // .replace('__INTERVAL__','10 20 30 40 50 60')
               .replace('__INTERVAL__',createInterval(update_interval))
-        ctx.body = sh
+        ctx.type = 'text/plain; charset=utf-8'
+        ctx.body = sh.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
       }else{
         ctx.status = 403
+        ctx.body = 'Node not found'
       }
     }else{
       ctx.status = 403
+      ctx.body = 'Missing node id'
     }
     
   },
@@ -50,19 +71,22 @@ module.exports = {
     if(id){
       let isValid = await service.hasNode(id)
       if(isValid){
-        let sh = fs.readFileSync(path.join(__dirname, '../shell/uninstall.sh'),'utf-8')
+        let sh = getShellContent('uninstall.sh')
 
         let host = ctx.origin + '/client/remove/' + id
 
         sh = sh.replace(/__HOST__/g , host)
               .replace('__TOKEN__',id)
 
-        ctx.body = sh
+        ctx.type = 'text/plain; charset=utf-8'
+        ctx.body = sh.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
       }else{
         ctx.status = 403
+        ctx.body = 'Node not found'
       }
     }else{
       ctx.status = 403
+      ctx.body = 'Missing node id'
     }
   },
 
@@ -82,7 +106,7 @@ module.exports = {
           [,ip,, location, isp] = data.split(/(?:：|\s{2,})/)
         }
 
-        let sh = fs.readFileSync(path.join(__dirname, '../shell/agent.sh'),'utf-8')
+        let sh = getShellContent('agent.sh')
 
         let host = ctx.origin + '/client/update'
 
@@ -92,14 +116,17 @@ module.exports = {
           installed:true , ip , location , isp
         })
 
-        ctx.body = sh
+        ctx.type = 'text/plain; charset=utf-8'
+        ctx.body = sh.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
       }else{
-
+        ctx.status = 403
+        ctx.body = 'Node not found'
       }
 
     }else{
-
+      ctx.status = 403
+      ctx.body = 'Missing node id'
     }
     
   },

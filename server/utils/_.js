@@ -160,7 +160,8 @@ function datetime(date, expr) {
 }
 
 function base64(a){
-  return new Buffer(a,'base64').toString()
+  if (!a) return ''
+  return Buffer.from(a, 'base64').toString()
 }
 
 module.exports = {

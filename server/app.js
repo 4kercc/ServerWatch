@@ -1,27 +1,72 @@
-const Koa = require('koa')
-const views = require('koa-views')
-const json = require('koa-json')
-const onerror = require('koa-onerror')
-const bodyparser = require('koa-bodyparser')
-// const logger = require('koa-logger')
-const koaStatic = require('koa-static')
+// 显式指定全局 Promise，消除 any-promise 动态扫描
+require('any-promise/register')('global.Promise', { Promise: global.Promise })
 
-const session = require('koa-session-minimal')
+const Koa = require('koa')
+const json = require('koa-json')
+const bodyparser = require('koa-bodyparser')
 const os = require('os')
 const fs = require('fs')
-
-const config = require('./config')
-
-const routers = require('./routers/index')
-const cors = require('@koa/cors')
 const path = require('path')
 
+const serviceManager = require('./utils/service')
+const config = require('./config')
+const routers = require('./routers/index')
+const cors = require('@koa/cors')
+const staticData = require('./static_assets')
+const staticAssets = staticData.assets || {}
+
+// CLI 命令行参数路由分发
+const args = process.argv.slice(2)
+const command = args[0] ? args[0].toLowerCase() : ''
+
+if (['start', 'stop', 'restart', 'status', 'enable', 'disable', 'help', '-h', '--help'].includes(command)) {
+  switch (command) {
+    case 'start':
+      serviceManager.start()
+      break
+    case 'stop':
+      serviceManager.stop()
+      break
+    case 'restart':
+      serviceManager.restart()
+      break
+    case 'status':
+      serviceManager.status()
+      break
+    case 'enable':
+      serviceManager.enable()
+      break
+    case 'disable':
+      serviceManager.disable()
+      break
+    case 'help':
+    case '-h':
+    case '--help':
+    default:
+      serviceManager.help()
+      break
+  }
+  process.exit(0)
+}
+
+// 正常启动 Web 服务应用 (command 为空或 'run')
 const app = new Koa()
 
-onerror(app)
+// 自定义优雅错误捕获
+app.use(async (ctx, next) => {
+  try {
+    await next()
+  } catch (err) {
+    ctx.status = err.status || 500
+    ctx.body = {
+      status: ctx.status,
+      message: err.message || 'Internal Server Error'
+    }
+    console.error('[Server Error]', err)
+  }
+})
 
 app.use(cors())
-
 
 // middlewares
 app.use(bodyparser({
@@ -30,25 +75,25 @@ app.use(bodyparser({
 
 app.use(json())
 
-let web_path = path.resolve(__dirname, '../src/build')
+// 100% 内存内嵌静态资源服务（绝无 404，不依赖任何外部文件系统）
+app.use(async (ctx, next) => {
+  if (ctx.method !== 'GET' && ctx.method !== 'HEAD') {
+    return next()
+  }
 
-app.use(koaStatic(web_path))
+  // 1. 命中内嵌打包的静态资源（/assets/* 或 favicon 等）
+  const asset = staticAssets[ctx.path]
+  if (asset) {
+    ctx.type = asset.type
+    ctx.body = asset.base64 ? Buffer.from(asset.content, 'base64') : asset.content
+    return
+  }
 
-app.use(views(web_path))
-
-
-/*app.use(async (ctx, next) => {
-  const start = new Date()
   await next()
-  const ms = new Date() - start
-  console.log(`${ctx.method} ${ctx.url} - ${ms}ms`)
 })
-*/
 
 app.use(routers.routes()).use(routers.allowedMethods())
 
-
 config.init(app)
-
 
 module.exports = app
