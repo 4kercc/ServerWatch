@@ -31,7 +31,8 @@ function runCmd(cmd) {
   }
 }
 
-function isRunning(pid) {
+function isProcessAlive(pid) {
+  if (!pid || isNaN(pid)) return false
   try {
     process.kill(pid, 0)
     return true
@@ -40,20 +41,19 @@ function isRunning(pid) {
   }
 }
 
+// 精确获取运行中的 ServerWatch 进程 PID（仅认有效 PID 文件与真实存活进程）
 function getPid() {
   if (fs.existsSync(PID_FILE)) {
     try {
-      const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim())
-      if (pid && isRunning(pid)) {
+      const content = fs.readFileSync(PID_FILE, 'utf8').trim()
+      const pid = parseInt(content)
+      if (pid && isProcessAlive(pid)) {
         return pid
+      } else {
+        // 残留的无效 PID 文件自动清理
+        try { fs.unlinkSync(PID_FILE) } catch (e) {}
       }
     } catch (e) {}
-  }
-  // 备用进程查找
-  const out = runCmd(`pgrep -f "${getBinaryPath()}" || true`)
-  if (out) {
-    const pids = out.trim().split('\n').map(p => parseInt(p)).filter(p => p && p !== process.pid)
-    if (pids.length > 0) return pids[0]
   }
   return null
 }
@@ -84,7 +84,7 @@ const serviceManager = {
   // 安装/更新 systemd 服务文件
   installSystemd() {
     if (!hasSystemd()) {
-      console.log('[-] 当前系��不支持 systemd。')
+      console.log('[-] 当前系统不支持 systemd。')
       return false
     }
     try {
@@ -98,7 +98,7 @@ const serviceManager = {
     }
   },
 
-  // 启动服务 (优先 systemd，降级守护进程)
+  // 启动服务 (优先使用 systemd，若无 systemd 或未 enable 则使用精确后台守护进程)
   start() {
     if (hasSystemd() && fs.existsSync(SYSTEMD_PATH)) {
       console.log('[*] 正在通过 systemd 启动 ServerWatch 服务...')
@@ -116,15 +116,18 @@ const serviceManager = {
     console.log('[*] 正在后台启动 ServerWatch 服务...')
     const bin = getBinaryPath()
     const outFd = fs.openSync(LOG_FILE, 'a')
+    
+    // 使用 node 真正的后台分离进程启动
     const child = spawn(bin, ['run'], {
       cwd: getWorkDir(),
       detached: true,
       stdio: ['ignore', outFd, outFd]
     })
+    
     child.unref()
 
     fs.writeFileSync(PID_FILE, String(child.pid))
-    console.log(`[+] ServerWatch 已启动成功 (PID: ${child.pid})，日志记录于: ${LOG_FILE}`)
+    console.log(`[+] ServerWatch 已在后台启动 (PID: ${child.pid})，日志记录于: ${LOG_FILE}`)
   },
 
   // 停止服务
@@ -142,8 +145,6 @@ const serviceManager = {
       } catch (e) {
         runCmd(`kill -9 ${pid} 2>/dev/null || true`)
       }
-    } else {
-      runCmd(`pkill -f "${getBinaryPath()}" 2>/dev/null || true`)
     }
 
     if (fs.existsSync(PID_FILE)) {
