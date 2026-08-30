@@ -77,6 +77,12 @@ module.exports = {
 
     // 自动嗅探模式安装：以全局嗅探密钥作为安装令牌，批量部署无需预先创建节点
     if (id && id === config.data().discover_key) {
+      // 已封禁来源 IP 拒绝嗅探探针安装
+      if (await service.isIpBanned(getSourceIp(ctx))) {
+        ctx.status = 403
+        ctx.body = 'banned'
+        return
+      }
       let sh = getShellContent('install.sh')
       let host = ctx.origin + '/client/agent/' + id
       sh = sh.replace(/__HOST__/g, host)
@@ -144,6 +150,12 @@ module.exports = {
       // 嗅探模式的探针脚本下发：携带双通道地址 (嗅探推送 + 正式托管上报)，
       // 并缓存本次安装上报的地理位置元数据，供该 IP 后续 push 预填充位置信息
       if (id === config.data().discover_key) {
+        // 已封禁来源 IP 拒绝下发嗅探探针脚本
+        if (await service.isIpBanned(getSourceIp(ctx))) {
+          ctx.status = 403
+          ctx.body = 'banned'
+          return
+        }
         let { data } = ctx.request.body || {}
         if (data) {
           try {
@@ -261,6 +273,13 @@ module.exports = {
 
     if (!srcIp) {
       ctx.body = 'OK'
+      return
+    }
+
+    // 已封禁来源 IP：拒绝通过嗅探通道再次注册或上报
+    if (await service.isIpBanned(srcIp)) {
+      ctx.status = 403
+      ctx.body = 'banned'
       return
     }
 

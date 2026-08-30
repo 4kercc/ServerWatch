@@ -131,6 +131,12 @@ async function init() {
       data TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS banned_ips (
+      ip TEXT PRIMARY KEY,
+      reason TEXT DEFAULT '',
+      created_at INTEGER DEFAULT 0
+    );
+
     CREATE INDEX IF NOT EXISTS idx_node_history_node_time ON node_history(node_id, timestamp);
   `)
 

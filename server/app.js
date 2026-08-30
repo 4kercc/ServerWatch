@@ -113,5 +113,10 @@ if (command === 'ssl') {
 
   config.init(app)
 
+  // 自动发现巡检：启动时与每 10 分钟清理一次超过 7 天未认领的嗅探节点，并自动封禁其来源 IP
+  const discoverService = require('./controllers/discover')
+  discoverService.sweepExpired()
+  setInterval(() => discoverService.sweepExpired(), 10 * 60 * 1000)
+
   module.exports = app
 }

@@ -135,6 +135,8 @@ ServerWatch/
 - `GET /api/discover`：自动发现中心总览（嗅探密钥、接入地址、批量安装命令、待认领节点列表）。
 - `POST /api/discover/claim`：认领待发现节点（设置名称/位置/采样参数，可选 sync_token 自动同步专属密钥）。
 - `POST /api/discover/remove`：忽略待认领的嗅探节点。
+- `POST /api/discover/ban`：封禁来源 IP (移除其待认领节点并禁止嗅探通道再接入)。
+- `POST /api/discover/unban`：解除 IP 封禁。
 - `POST /api/discover/regenerate`：重置嗅探密钥（旧密钥立即失效）。
 - `GET /api/setting` / `POST /api/setting`：系统账号、密码、访客模式开关与运行端口配置。
 
@@ -147,6 +149,7 @@ ServerWatch/
    - 已认领 (`push_source=1`) → 完整入库并按 `record_interval` 归档时序。
 4. **认领与密钥同步**：认领时若开启 `sync_token`，推送响应将下发正式专属 Token（`TOKEN <id>`），探针自动原子换写本地 token.log 并无缝切换到 `/client/update` 托管通道；若不开启，则保持纯推送分流模式。
 5. **密钥轮换**：支持随时重置嗅探密钥，旧密钥立即失效，需重新部署探针。
+6. **生命周期与防滥用**：待认领嗅探节点仅保留 7 天 (服务端每 10 分钟巡检一次)，超时未认领自动清理，并自动封禁其来源 IP (banned_ips 表持久化)；管理员可手动封禁/解封，封禁 IP 的嗅探安装、脚本下发与推送上报全部返回 403。
 
 ---
 
@@ -200,3 +203,4 @@ chmod +x serverwatch-linux
   9. **多平台单文件二进制发布**：成功构建并发布 Linux x64 (`serverwatch-linux`)、Linux ARM64 (`serverwatch-linux-arm64`) 与 Windows x64 (`serverwatch-win-x64.exe`)。
   10. **高清演示视频入库与发布**：将系统演示视频集成至 `assets/demo.mp4`，在 `README.md` 中嵌入展���，并发布至 GitHub Release v2.0.6 资产列表。
   11. **自动发现中心 (零接触嗅探接入)**：新增全局嗅探密钥与 `/client/push/:key` 免 Token 推送通道；批量执行一条安装命令即可让任意多台服务器按源 IP 自动归档到发现列表；支持认领设置参数、可选专属密钥自动同步（探针自动换发 Token 无缝切换托管通道）或纯推送 IP 分流模式；agent.sh 升级为嗅探/托管双通道架构并采集主机名；管理员侧提供发现列表、认领弹窗、忽略与密钥重置；端到端联调 38 项断言全部通过。
+  12. **嗅探节点生命周期与来源 IP 封禁**：待认领服务器 7 天无人认领自动消失并封禁来源 IP；新增 banned_ips 持久化封禁体系、手动封禁/解封接口与管理端封禁列表卡片，嗅探安装/脚本下发/推送三通道全量拦截封禁 IP；巡检幂等且不影响已认领节点。

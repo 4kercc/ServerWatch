@@ -308,6 +308,61 @@ const node = {
     return rows.length > 0
   },
 
+  // ============ 来源 IP 封禁体系 (嗅探通道防滥用) ============
+
+  // 封禁来源 IP (幂等)：已存在时刷新原因与时间
+  async banIp(ip, reason) {
+    await sqlite.init()
+    const cleanIp = String(ip || '').trim()
+    if (!cleanIp) return false
+    sqlite.execute('INSERT OR REPLACE INTO banned_ips (ip, reason, created_at) VALUES (?, ?, ?)', [
+      cleanIp, reason || '', Date.now()
+    ])
+    return true
+  },
+
+  // 查询 IP 是否已被封禁
+  async isIpBanned(ip) {
+    await sqlite.init()
+    const row = sqlite.queryOne('SELECT ip FROM banned_ips WHERE ip = ?', [String(ip || '').trim()])
+    return !!row
+  },
+
+  // 全部封禁记录 (按时间倒序)
+  async getBannedIps() {
+    await sqlite.init()
+    return sqlite.queryAll('SELECT ip, reason, created_at FROM banned_ips ORDER BY created_at DESC')
+  },
+
+  // 解除封禁
+  async unbanIp(ip) {
+    await sqlite.init()
+    const cleanIp = String(ip || '').trim()
+    if (!cleanIp) return false
+    const row = sqlite.queryOne('SELECT ip FROM banned_ips WHERE ip = ?', [cleanIp])
+    if (!row) return false
+    sqlite.execute('DELETE FROM banned_ips WHERE ip = ?', [cleanIp])
+    return true
+  },
+
+  // 巡检：清理超过 TTL 仍未认领的嗅探节点，并自动封禁其来源 IP
+  // 返回被清理的节点摘要 [{ id, ip, label }]
+  async sweepExpiredDiscovered(ttlMs) {
+    await sqlite.init()
+    const deadline = Date.now() - (ttlMs || 7 * 24 * 60 * 60 * 1000)
+    const rows = sqlite.queryAll('SELECT id, ip, label FROM nodes WHERE discovered = 1 AND created_at < ?', [deadline])
+    for (const row of rows) {
+      if (row.ip) {
+        sqlite.execute('INSERT OR REPLACE INTO banned_ips (ip, reason, created_at) VALUES (?, ?, ?)', [
+          row.ip, '7 天未认领自动封禁', Date.now()
+        ])
+      }
+      sqlite.execute('DELETE FROM node_history WHERE node_id = ?', [row.id])
+      sqlite.execute('DELETE FROM nodes WHERE id = ?', [row.id])
+    }
+    return rows
+  },
+
   async record(idOrIndex, data) {
     await sqlite.init()
     let row = null

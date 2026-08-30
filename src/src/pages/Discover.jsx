@@ -4,7 +4,8 @@ import { cn, formatByte, formatDateTime } from '../lib/utils'
 import { CountryFlag } from '../components/CountryFlag'
 import {
   Radar, RefreshCw, Copy, Check, ClipboardPaste, ChevronDown, ChevronUp,
-  MonitorCheck, Trash2, X, AlertCircle, CheckCircle2, KeyRound, Terminal, Server
+  MonitorCheck, Trash2, X, AlertCircle, CheckCircle2, KeyRound, Terminal, Server,
+  ShieldBan, ShieldOff, Timer
 } from 'lucide-react'
 
 // 强壮的跨浏览器复制实现 (兼容 HTTP 非安全上下文)
@@ -102,6 +103,35 @@ export default function Discover() {
       const res = await http.post('/api/discover/remove', { ip })
       if (res && res.status === 0) {
         showSuccess('已忽略该节点')
+        fetchData()
+      } else {
+        setError(res?.message || '操作失败')
+      }
+    } catch (err) {
+      setError('操作失败')
+    }
+  }
+
+  const handleBan = async (ip) => {
+    if (!window.confirm(`确定封禁来源 IP ${ip} 吗？\n\n封禁后该服务器将从列表移除，且无法再通过嗅探通道注册或上报。\n如需恢复，可在下方封禁列表中解除封禁。`)) return
+    try {
+      const res = await http.post('/api/discover/ban', { ip })
+      if (res && res.status === 0) {
+        showSuccess(`已封禁 ${ip} 并移除其待认领数据`)
+        fetchData()
+      } else {
+        setError(res?.message || '操作失败')
+      }
+    } catch (err) {
+      setError('操作失败')
+    }
+  }
+
+  const handleUnban = async (ip) => {
+    try {
+      const res = await http.post('/api/discover/unban', { ip })
+      if (res && res.status === 0) {
+        showSuccess(`已解除 ${ip} 的封禁，该服务器下次推送时将重新登记`)
         fetchData()
       } else {
         setError(res?.message || '操作失败')
@@ -250,6 +280,13 @@ export default function Discover() {
               也可以选择「不同步」，服务器保持推送模式，数据持续按 IP 自动分流到对应节点。
             </p>
           </div>
+          <div className="flex items-start gap-1.5">
+            <Timer className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+            <p className="text-[11px] text-amber-600/90 dark:text-amber-500/90 leading-relaxed">
+              安全策略：待认领服务器保留 <span className="font-semibold">{info?.ttl_days ?? 7} 天</span>，
+              超时未认领将自动从列表消失，并<b>封禁其来源 IP</b> (该 IP 将无法再通过嗅探通道注册或上报，可在下方封禁列表解除)。
+            </p>
+          </div>
         </div>
       </div>
 
@@ -354,6 +391,17 @@ export default function Discover() {
                             <span className={cn('h-1.5 w-1.5 rounded-full', n.online ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/50')}></span>
                             {n.online ? '推送中' : '静默'}
                           </span>
+                          {n.expire_at && (
+                            <div className="text-[10px] font-mono text-amber-600/90 dark:text-amber-500/90 mt-1">
+                              {(() => {
+                                const left = n.expire_at - Date.now()
+                                if (left <= 0) return '即将过期'
+                                const days = Math.floor(left / 86400000)
+                                const hours = Math.floor((left % 86400000) / 3600000)
+                                return days > 0 ? `剩 ${days} 天 ${hours} 时` : `剩 ${hours} 小时`
+                              })()}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-3.5 text-right whitespace-nowrap">
                           <button
@@ -364,9 +412,16 @@ export default function Discover() {
                             认领
                           </button>
                           <button
+                            onClick={() => handleBan(n.ip)}
+                            className="inline-flex items-center justify-center h-7 w-7 ml-1.5 rounded-lg border border-border text-muted-foreground hover:text-orange-500 hover:border-orange-500/30 hover:bg-orange-500/10 transition cursor-pointer"
+                            title="封禁该来源 IP (自动移除并禁止再接入)"
+                          >
+                            <ShieldBan className="h-3.5 w-3.5" />
+                          </button>
+                          <button
                             onClick={() => handleIgnore(n.ip)}
                             className="inline-flex items-center justify-center h-7 w-7 ml-1.5 rounded-lg border border-border text-muted-foreground hover:text-red-500 hover:border-red-500/30 hover:bg-red-500/10 transition cursor-pointer"
-                            title="忽略该服务器"
+                            title="忽略该服务器 (下次推送将重新登记)"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -389,6 +444,55 @@ export default function Discover() {
                     </React.Fragment>
                   )
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 封禁 IP 列表 */}
+      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
+          <div className="flex items-center gap-2">
+            <ShieldBan className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">封禁 IP 列表</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 font-mono">{(info?.banned || []).length}</span>
+          </div>
+          <span className="text-[11px] text-muted-foreground">被封禁 IP 无法通过嗅探通道注册或上报</span>
+        </div>
+
+        {(info?.banned || []).length === 0 ? (
+          <div className="px-6 py-8 text-center text-xs text-muted-foreground">
+            暂无封禁记录 · 待认领服务器超过 {info?.ttl_days ?? 7} 天未认领时其来源 IP 将自动进入此列表
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border/60">
+                  <th className="px-6 py-3 font-medium">IP 地址</th>
+                  <th className="px-4 py-3 font-medium">封禁原因</th>
+                  <th className="px-4 py-3 font-medium">封禁时间</th>
+                  <th className="px-6 py-3 font-medium text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(info?.banned || []).map((b) => (
+                  <tr key={b.ip} className="border-b border-border/40 hover:bg-muted/30 transition">
+                    <td className="px-6 py-3 font-mono text-xs text-foreground">{b.ip}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{b.reason || '-'}</td>
+                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{b.created_at ? formatDateTime(b.created_at) : '-'}</td>
+                    <td className="px-6 py-3 text-right">
+                      <button
+                        onClick={() => handleUnban(b.ip)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold rounded-lg border border-border text-muted-foreground hover:text-emerald-500 hover:border-emerald-500/30 hover:bg-emerald-500/10 transition cursor-pointer"
+                      >
+                        <ShieldOff className="h-3.5 w-3.5" />
+                        解除封禁
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
