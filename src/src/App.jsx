@@ -7,6 +7,7 @@ import ServerCreate from './pages/ServerCreate'
 import ServerEdit from './pages/ServerEdit'
 import ServerRemove from './pages/ServerRemove'
 import Setting from './pages/Setting'
+import Discover from './pages/Discover'
 import SignIn from './pages/SignIn'
 import http from './lib/http'
 
@@ -108,6 +109,7 @@ export default function App() {
           <Route path="server/create" element={<RequireAuth><ServerCreate /></RequireAuth>} />
           <Route path="server/:id/edit" element={<RequireAuth><ServerEdit /></RequireAuth>} />
           <Route path="server/:id/remove" element={<RequireAuth><ServerRemove /></RequireAuth>} />
+          <Route path="discover" element={<RequireAuth><Discover /></RequireAuth>} />
           <Route path="setting" element={<RequireAuth><Setting /></RequireAuth>} />
         </Route>
 

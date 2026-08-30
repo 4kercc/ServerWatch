@@ -18,8 +18,13 @@ function parseNodeRow(row) {
     remark: row.remark,
     installed: !!row.installed,
     online: !!row.online,
+    discovered: !!row.discovered,
+    push_source: !!row.push_source,
+    sync_token: !!row.sync_token,
+    hostname: row.hostname || '',
     time_response: row.time_response,
     time_record: row.time_record,
+    created_at: row.created_at || 0,
     update_interval: row.update_interval || 5,
     record_interval: row.record_interval || 60,
     record_limit: row.record_limit || 1440,
@@ -32,13 +37,13 @@ function parseNodeRow(row) {
 const node = {
   async getNodes(page, limit) {
     await sqlite.init()
-    const rows = sqlite.queryAll('SELECT * FROM nodes ORDER BY index_id ASC, created_at ASC LIMIT ? OFFSET ?', [limit, page * limit])
+    const rows = sqlite.queryAll('SELECT * FROM nodes WHERE discovered IS NULL OR discovered = 0 ORDER BY index_id ASC, created_at ASC LIMIT ? OFFSET ?', [limit, page * limit])
     return rows.map(parseNodeRow)
   },
 
   async getNodesWithoutHistory() {
     await sqlite.init()
-    const rows = sqlite.queryAll('SELECT * FROM nodes ORDER BY index_id ASC, created_at ASC')
+    const rows = sqlite.queryAll('SELECT * FROM nodes WHERE discovered IS NULL OR discovered = 0 ORDER BY index_id ASC, created_at ASC')
     return rows.map(parseNodeRow)
   },
 
@@ -70,6 +75,10 @@ const node = {
       recordIntervalVal,
       recordLimitVal,
       1, // 强制默认开启历史入库
+      data.discovered ? 1 : 0,
+      data.push_source ? 1 : 0,
+      data.sync_token ? 1 : 0,
+      data.hostname || '',
       JSON.stringify(data.snapshot || {}),
       Date.now()
     ]
@@ -77,8 +86,9 @@ const node = {
       INSERT INTO nodes (
         id, index_id, label, ip, location, isp, remark, installed, online,
         time_response, time_record, update_interval, record_interval,
-        record_limit, recordable, snapshot, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        record_limit, recordable, discovered, push_source, sync_token, hostname,
+        snapshot, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, params)
     data.index_id = nextIndex
     return data
@@ -186,6 +196,10 @@ const node = {
         record_interval = ?,
         record_limit = ?,
         recordable = 1,
+        discovered = ?,
+        push_source = ?,
+        sync_token = ?,
+        hostname = ?,
         snapshot = ?
       WHERE id = ?
     `, [
@@ -201,6 +215,10 @@ const node = {
       merged.update_interval || 5,
       merged.record_interval || 60,
       merged.record_limit || 1440,
+      merged.discovered === true || merged.discovered === 1 ? 1 : 0,
+      merged.push_source === true || merged.push_source === 1 ? 1 : 0,
+      merged.sync_token === true || merged.sync_token === 1 ? 1 : 0,
+      merged.hostname || '',
       JSON.stringify(merged.snapshot || {}),
       realId
     ])
@@ -230,15 +248,75 @@ const node = {
     return true
   },
 
+  // ============ 自动发现 (嗅探推送) 体系持久层 ============
+
+  // 查询待认领的嗅探节点 (按源 IP 精确匹配)
+  async findDiscoveredPendingByIp(ip) {
+    await sqlite.init()
+    const row = sqlite.queryOne('SELECT * FROM nodes WHERE ip = ? AND discovered = 1 LIMIT 1', [String(ip || '')])
+    return row ? parseNodeRow(row) : null
+  },
+
+  // 查询已认领且持续由嗅探推送通道供数的节点 (按源 IP 分流)
+  async findPushBoundByIp(ip) {
+    await sqlite.init()
+    const row = sqlite.queryOne('SELECT * FROM nodes WHERE ip = ? AND discovered = 0 AND push_source = 1 LIMIT 1', [String(ip || '')])
+    return row ? parseNodeRow(row) : null
+  },
+
+  // 待认领嗅探节点：仅刷新实时快照与在线状态 (不写入历史时序，避免未认领垃圾数据膨胀)
+  async updateDiscoveredSnapshot(idOrIndex, data) {
+    await sqlite.init()
+    let row = null
+    const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
+    if (isNumeric) {
+      row = sqlite.queryOne('SELECT id, hostname FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
+    }
+    if (!row) {
+      row = sqlite.queryOne('SELECT id, hostname FROM nodes WHERE id = ?', [String(idOrIndex)])
+    }
+    if (!row) return false
+
+    const curTime = Date.now()
+    const hostname = (data && data.hostname) || row.hostname || ''
+    sqlite.execute(`
+      UPDATE nodes SET
+        snapshot = ?,
+        hostname = ?,
+        online = 1,
+        time_response = ?
+      WHERE id = ?
+    `, [JSON.stringify(data || {}), hostname, curTime, row.id])
+    return true
+  },
+
+  // 全部待认领嗅探节点列表
+  async getDiscoveredNodes() {
+    await sqlite.init()
+    const rows = sqlite.queryAll('SELECT * FROM nodes WHERE discovered = 1 ORDER BY time_response DESC')
+    return rows.map(parseNodeRow)
+  },
+
+  // 移除 (忽略) 待认领嗅探节点
+  async removeDiscoveredByIp(ip) {
+    await sqlite.init()
+    const rows = sqlite.queryAll('SELECT id FROM nodes WHERE ip = ? AND discovered = 1', [String(ip || '')])
+    for (const row of rows) {
+      sqlite.execute('DELETE FROM node_history WHERE node_id = ?', [row.id])
+      sqlite.execute('DELETE FROM nodes WHERE id = ?', [row.id])
+    }
+    return rows.length > 0
+  },
+
   async record(idOrIndex, data) {
     await sqlite.init()
     let row = null
     const isNumeric = /^\d+$/.test(String(idOrIndex).trim())
     if (isNumeric) {
-      row = sqlite.queryOne('SELECT id, record_interval, record_limit, time_record, ip, location, isp FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
+      row = sqlite.queryOne('SELECT id, record_interval, record_limit, time_record, ip, location, isp, hostname FROM nodes WHERE index_id = ?', [parseInt(idOrIndex)])
     }
     if (!row) {
-      row = sqlite.queryOne('SELECT id, record_interval, record_limit, time_record, ip, location, isp FROM nodes WHERE id = ?', [String(idOrIndex)])
+      row = sqlite.queryOne('SELECT id, record_interval, record_limit, time_record, ip, location, isp, hostname FROM nodes WHERE id = ?', [String(idOrIndex)])
     }
     if (!row) return 'error'
 
@@ -273,6 +351,7 @@ const node = {
     const finalIp = row.ip || data.ipv4 || ''
     const finalLoc = row.location || data.location || ''
     const finalIsp = row.isp || data.isp || ''
+    const finalHostname = (data && data.hostname) || row.hostname || ''
 
     sqlite.execute(`
       UPDATE nodes SET
@@ -284,6 +363,7 @@ const node = {
         ip = ?,
         location = ?,
         isp = ?,
+        hostname = ?,
         recordable = 1
       WHERE id = ?
     `, [
@@ -293,6 +373,7 @@ const node = {
       finalIp,
       finalLoc,
       finalIsp,
+      finalHostname,
       realId
     ])
 

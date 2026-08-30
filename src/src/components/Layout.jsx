@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, Settings, LogOut, LogIn, Shield, Sun, Moon, ArrowDown, ArrowUp, User } from 'lucide-react'
+import { Activity, Settings, LogOut, LogIn, Shield, Sun, Moon, ArrowDown, ArrowUp, User, Radar } from 'lucide-react'
 
 export default function Layout({ onlineCount = 0, totalCount = 0, txTotal = 0, rxTotal = 0 }) {
   const location = useLocation()
@@ -112,6 +112,14 @@ export default function Layout({ onlineCount = 0, totalCount = 0, txTotal = 0, r
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                         已登录管理员
                       </div>
+                      <Link
+                        to="/discover"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 text-sm rounded-md hover:bg-muted transition text-foreground"
+                      >
+                        <Radar className="h-4 w-4 text-muted-foreground" />
+                        自动发现中心
+                      </Link>
                       <Link
                         to="/setting"
                         onClick={() => setUserMenuOpen(false)}

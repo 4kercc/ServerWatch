@@ -61,7 +61,8 @@ ServerWatch/
 │   ├── build_assets.js           # 静态资产打包与 LF 换行符清洗脚本
 │   ├── controllers/              # 业务控制器
 │   │   ├── account.js            # 账号与登录管理、系统全局设置 (防爆破)
-│   │   ├── client.js             # 探针安装、卸载、探针脚本下发及数据上报
+│   │   ├── client.js             # 探针安装、卸载、探针脚本下发、数据上报与嗅探推送分流
+│   │   ├── discover.js           # 自动发现中心 (嗅探列表/认领/忽略/密钥重置)
 │   │   ├── home.js               # 首页及 SPA 客户端路由托管处理
 │   │   └── node.js               # 探针节点增删改查及快照/历史数据管理
 │   ├── middleware/               # 中间件 (JWT 鉴权 koa-auth)
@@ -75,7 +76,7 @@ ServerWatch/
 │   │   ├── index.js              # 路由��总与鉴权拦截
 │   │   └── signin.js             # 登录路由
 │   ├── shell/                    # 探针客户端 Shell 脚本模板
-│   │   ├── agent.sh              # 性能指标采集与上报脚本 (monitor 权限沙箱)
+│   │   ├── agent.sh              # 性能指标采集与上报脚本 (monitor 权限沙箱，支持嗅探/托管双通道)
 │   │   ├── install.sh            # 客户端自动化安装脚本 (创建 monitor 用户)
 │   │   └── uninstall.sh          # 客户端清理卸载脚本
 │   └── utils/                    # 工具类库 (service.js 服务管理, ssl.js 证书自动化)
@@ -96,6 +97,7 @@ ServerWatch/
             ├── ServerCreate.jsx  # 添加监控节点
             ├── ServerEdit.jsx    # 修改节点策略
             ├── ServerRemove.jsx  # 移除与卸载节点
+            ├── Discover.jsx      # 自动发现中心 (嗅探接入配置、待认领列表、认领弹窗)
             ├── Setting.jsx       # 系统账户、访客模式与端口配置
             └── SignIn.jsx        # 管理员登录界面
 ```
@@ -129,7 +131,22 @@ ServerWatch/
 - `POST /api/node/:id`：更新节点配置。
 - `POST /api/node/:id/remove`：彻底删除节点。
 - `GET /client/remove/:id`：探针卸载安全标记离线。
+- `POST /client/push/:key`（别名 `POST /api/server/push/:key`）：嗅探推送通道，凭全局嗅探密钥免 Token 上报，服务端按源 IP 自动归档分流。
+- `GET /api/discover`：自动发现中心总览（嗅探密钥、接入地址、批量安装命令、待认领节点列表）。
+- `POST /api/discover/claim`：认领待发现节点（设置名称/位置/采样参数，可选 sync_token 自动同步专属密钥）。
+- `POST /api/discover/remove`：忽略待认领的嗅探节点。
+- `POST /api/discover/regenerate`：重置嗅探密钥（旧密钥立即失效）。
 - `GET /api/setting` / `POST /api/setting`：系统账号、密码、访客模式开关与运行端口配置。
+
+### 4.3 自动发现 (嗅探接入) 工作流
+1. **批量部署**：管理员在「自动发现中心」复制嗅探安装命令，批量在任意多台服务器执行（无需预先创建节点）。
+2. **免 Token 推送**：探针以 `DISCOVER <嗅探密钥>` 模式运行，定时将指标 POST 至 `/client/push/<key>`。
+3. **IP 归档分流**：服务端按源 IP（socket 直连优先，反代场景采信 X-Forwarded-For）匹配：
+   - 全新 IP → 自动登记为「待认领」嗅探节点（仅保留实时快照，不写历史）；
+   - 已待认领 → 刷新快照与在线状态；
+   - 已认领 (`push_source=1`) → 完整入库并按 `record_interval` 归档时序。
+4. **认领与密钥同步**：认领时若开启 `sync_token`，推送响应将下发正式专属 Token（`TOKEN <id>`），探针自动原子换写本地 token.log 并无缝切换到 `/client/update` 托管通道；若不开启，则保持纯推送分流模式。
+5. **密钥轮换**：支持随时重置嗅探密钥，旧密钥立即失效，需重新部署探针。
 
 ---
 
@@ -182,3 +199,4 @@ chmod +x serverwatch-linux
   8. **安全沙箱隔离探针**：探针安装逻辑升级为自动创建禁止登录独立用户 `monitor` (`nologin`)，探针与数据上报限制在独立沙箱 crontab 运行。
   9. **多平台单文件二进制发布**：成功构建并发布 Linux x64 (`serverwatch-linux`)、Linux ARM64 (`serverwatch-linux-arm64`) 与 Windows x64 (`serverwatch-win-x64.exe`)。
   10. **高清演示视频入库与发布**：将系统演示视频集成至 `assets/demo.mp4`，在 `README.md` 中嵌入展���，并发布至 GitHub Release v2.0.6 资产列表。
+  11. **自动发现中心 (零接触嗅探接入)**：新增全局嗅探密钥与 `/client/push/:key` 免 Token 推送通道；批量执行一条安装命令即可让任意多台服务器按源 IP 自动归档到发现列表；支持认领设置参数、可选专属密钥自动同步（探针自动换发 Token 无缝切换托管通道）或纯推送 IP 分流模式；agent.sh 升级为嗅探/托管双通道架构并采集主机名；管理员侧提供发现列表、认领弹窗、忽略与密钥重置；端到端联调 38 项断言全部通过。

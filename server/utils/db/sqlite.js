@@ -116,6 +116,10 @@ async function init() {
       record_interval INTEGER DEFAULT 60,
       record_limit INTEGER DEFAULT 1440,
       recordable INTEGER DEFAULT 1,
+      discovered INTEGER DEFAULT 0,
+      push_source INTEGER DEFAULT 0,
+      sync_token INTEGER DEFAULT 0,
+      hostname TEXT DEFAULT '',
       snapshot TEXT DEFAULT '{}',
       created_at INTEGER DEFAULT 0
     );
@@ -135,9 +139,23 @@ async function init() {
     db.run(`ALTER TABLE nodes ADD COLUMN index_id INTEGER;`)
   } catch(e) {}
 
+  // 自动发现体系平滑升级列：
+  // discovered  = 1 表示嗅探推送发现、待管理员认领的节点
+  // push_source = 1 表示该节点由嗅探推送通道持续供数 (按 IP 分流)
+  // sync_token  = 1 表示认领时开启了"密钥自动同步"，推送响应将下发正式 Token 供探针自动切换
+  try { db.run(`ALTER TABLE nodes ADD COLUMN discovered INTEGER DEFAULT 0;`) } catch(e) {}
+  try { db.run(`ALTER TABLE nodes ADD COLUMN push_source INTEGER DEFAULT 0;`) } catch(e) {}
+  try { db.run(`ALTER TABLE nodes ADD COLUMN sync_token INTEGER DEFAULT 0;`) } catch(e) {}
+  try { db.run(`ALTER TABLE nodes ADD COLUMN hostname TEXT DEFAULT '';`) } catch(e) {}
+
   // 创建 index_id 索引
   try {
     db.run(`CREATE INDEX IF NOT EXISTS idx_nodes_index_id ON nodes(index_id);`)
+  } catch(e) {}
+
+  // 创建 IP 路由索引 (嗅探推送按 IP 分流高频查询)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_nodes_ip ON nodes(ip);`)
   } catch(e) {}
 
   // 为缺少 index_id 的历史节点初始化顺序序号 (1, 2, 3...)

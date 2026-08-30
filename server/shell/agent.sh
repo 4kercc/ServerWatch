@@ -70,6 +70,9 @@ function os ()
 {
   os_kernel=$(uname -r)
 
+  # 主机名 (自动发现模式下用于服务端预填充节点名称)
+  hostname=$(uname -n 2>/dev/null)
+
   if ls /etc/*release > /dev/null 2>&1; then
     os_name=$(li "$(cat /etc/*release 2>/dev/null | grep '^PRETTY_NAME=\|^NAME=\|^DISTRIB_ID=' | awk -F\= '{ print $2 }' | tr -d '"' | tac)")
   fi
@@ -204,15 +207,56 @@ function load (){
   load_io=$(li $(num "$load_io"))
 }
 
+# 构造上报数据体 (与 /client/update 固定字段顺序一致，末位 hostname 向后兼容旧探针)
+function payload ()
+{
+  echo "$(base "$uptime") $(base "$sessions") $(base "$processes") $(base "$processes_array") $(base "$file_handles") $(base "$file_handles_limit") $(base "$os_kernel") $(base "$os_name") $(base "$os_arch") $(base "$cpu_name") $(base "$cpu_cores") $(base "$cpu_freq") $(base "$ram_total") $(base "$ram_usage") $(base "$swap_total") $(base "$swap_usage") $(base "$disk_array") $(base "$disk_total") $(base "$disk_usage") $(base "$connections") $(base "$nic") $(base "$ipv4") $(base "$ipv6") $(base "$rx") $(base "$tx") $(base "$rx_gap") $(base "$tx_gap") $(base "$loadavg") $(base "$load_cpu") $(base "$load_io") $(base "$hostname")"
+}
+
 function update ()
 {
-  data_post="token=${token[0]}&data=$(base "$uptime") $(base "$sessions") $(base "$processes") $(base "$processes_array") $(base "$file_handles") $(base "$file_handles_limit") $(base "$os_kernel") $(base "$os_name") $(base "$os_arch") $(base "$cpu_name") $(base "$cpu_cores") $(base "$cpu_freq") $(base "$ram_total") $(base "$ram_usage") $(base "$swap_total") $(base "$swap_usage") $(base "$disk_array") $(base "$disk_total") $(base "$disk_usage") $(base "$connections") $(base "$nic") $(base "$ipv4") $(base "$ipv6") $(base "$rx") $(base "$tx") $(base "$rx_gap") $(base "$tx_gap") $(base "$loadavg") $(base "$load_cpu") $(base "$load_io")"
+  # ============ 嗅探发现模式 ============
+  # token.log 首段为 DISCOVER 时进入免 Token 推送通道：
+  # 服务端按源 IP 自动归档；管理员认领后推送响应将下发正式 TOKEN，本脚本自动切换到托管通道
+  if [ "${token[0]}" = "DISCOVER" ]; then
+    dkey="${token[1]}"
+    resp=""
+    if [ -n "$(command -v curl)" ]; then
+      resp=$(curl -s --max-time 15 -d "key=${dkey}&data=$(payload)" -k "__PUSH_HOST__" 2>/dev/null)
+    else
+      resp=$(wget -qO- -T 15 --post-data "key=${dkey}&data=$(payload)" --no-check-certificate "__PUSH_HOST__" 2>/dev/null)
+    fi
+
+    case "$resp" in
+      TOKEN\ *)
+        ntoken="$(echo "$resp" | awk '{ print $2 }' | tr -d '\r\n')"
+        if [ -n "$ntoken" ]; then
+          # 原子换发正式专属 Token (下一轮起自动走托管通道)
+          echo "$ntoken" > "$SW_DIR/token.log.sw" && mv -f "$SW_DIR/token.log.sw" "$SW_DIR/token.log"
+          echo "token switched, syncing via managed channel..." > "$SW_DIR/agent.log"
+          # 立即以正式 Token 向托管通道补报一次，实现零中断切换
+          if [ -n "$(command -v curl)" ]; then
+            curl -s --max-time 15 -d "token=${ntoken}&data=$(payload)" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
+          else
+            wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "token=${ntoken}&data=$(payload)" --no-check-certificate "__UPDATE_HOST__"
+          fi
+        fi
+        ;;
+      *)
+        echo "$resp" > "$SW_DIR/agent.log" 2>&1
+        ;;
+    esac
+    return
+  fi
+
+  # ============ 常规托管模式 ============
+  data_post="token=${token[0]}&data=$(payload)"
 
   # 上传数据 (优先 curl，备用 wget)
   if [ -n "$(command -v curl)" ]; then
-    curl -s --max-time 15 -d "$data_post" -k "__HOST__" > "$SW_DIR/agent.log" 2>&1
+    curl -s --max-time 15 -d "$data_post" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
   else
-    wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "$data_post" --no-check-certificate "__HOST__"
+    wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "$data_post" --no-check-certificate "__UPDATE_HOST__"
   fi
 }
 

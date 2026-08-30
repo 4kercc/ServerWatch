@@ -16,6 +16,7 @@ var cfg = {
   "username": "admin",
   "password": generateRandomString(8),
   "jwt_secret": generateRandomString(32),
+  "discover_key": generateRandomString(16),
   "port": 51221,
   "domain": "",
   "ssl": false,
@@ -44,12 +45,15 @@ function init(instance){
     try {
       const data = fs.readFileSync(config_path, 'utf-8')
       cfg = Object.assign(cfg, JSON.parse(data))
-      // 为既往旧配置文件平滑补充高强度 jwt_secret 与 guest_mode
+      // 为既往旧配置文件平滑补充高强度 jwt_secret、guest_mode 与嗅探密钥
       if (!cfg.jwt_secret) {
         cfg.jwt_secret = generateRandomString(32)
       }
       if (typeof cfg.guest_mode === 'undefined') {
         cfg.guest_mode = true
+      }
+      if (!cfg.discover_key) {
+        cfg.discover_key = generateRandomString(16)
       }
       fs.writeFileSync(config_path, JSON.stringify(cfg, null, 2))
     } catch(e) {}
@@ -121,9 +125,12 @@ function getJwtSecret() {
 }
 
 async function save(d){
-  // 保持原有 jwt_secret
+  // 保持原有 jwt_secret 与嗅探密钥 (防止局部更新时意外丢失)
   if (!d.jwt_secret && cfg.jwt_secret) {
     d.jwt_secret = cfg.jwt_secret
+  }
+  if (!d.discover_key && cfg.discover_key) {
+    d.discover_key = cfg.discover_key
   }
 
   let str = JSON.stringify(d, null, 2)

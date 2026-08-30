@@ -11,5 +11,6 @@ const routers = router
     .get('/remove/:id' , service.remove)
     .post('/agent/:id' , service.agent)
     .post('/update' , service.update)
+    .post('/push/:key' , service.push)
     
 module.exports = routers
