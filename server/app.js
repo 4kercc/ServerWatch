@@ -15,11 +15,13 @@ const cors = require('@koa/cors')
 const staticData = require('./static_assets')
 const staticAssets = staticData.assets || {}
 
-// CLI 命令行参数路由分发
-const args = process.argv.slice(2)
+// CLI 命令行参数路由分发 (过滤掉 --daemon 等内部标记)
+const rawArgs = process.argv.slice(2)
+const isDaemon = process.env.SERVERWATCH_DAEMON === '1' || rawArgs.includes('--daemon') || rawArgs.includes('-d')
+const args = rawArgs.filter(a => !a.startsWith('--') && !a.startsWith('-'))
 const command = args[0] ? args[0].toLowerCase() : ''
 
-if (command === 'ssl') {
+if (!isDaemon && command === 'ssl') {
   const domain = args[1]
   const action = args[2] || 'start'
   serviceManager.handleSsl(domain, action).then(() => {
@@ -28,7 +30,7 @@ if (command === 'ssl') {
     console.error('[-] SSL 执行异常:', err)
     process.exit(1)
   })
-} else if (['start', 'stop', 'restart', 'status', 'enable', 'disable', 'help', '-h', '--help'].includes(command)) {
+} else if (!isDaemon && ['start', 'stop', 'restart', 'status', 'enable', 'disable', 'help', '-h', '--help'].includes(command)) {
   switch (command) {
     case 'start':
       serviceManager.start()
@@ -49,15 +51,13 @@ if (command === 'ssl') {
       serviceManager.disable()
       break
     case 'help':
-    case '-h':
-    case '--help':
     default:
       serviceManager.help()
       break
   }
   process.exit(0)
 } else {
-  // 正常启动 Web 服务应用 (command 为空或 'run')
+  // 正常启动 Web 服务应用 (command 为空或 'run' 或 --daemon 子进程)
   const app = new Koa()
 
   // 1. 全局 HTTP 安全防护 Header 中间件 (防点击劫持、防 MIME 嗅探、防 XSS 攻击)

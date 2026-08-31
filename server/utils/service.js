@@ -60,6 +60,11 @@ function getPid() {
   return null
 }
 
+function getSpawnArgs() {
+  // __filename 是 Node.js 内置变量，在 pkg 快照���永远精确指向内嵌的 bundle.cjs 虚拟绝对路径
+  return [__filename]
+}
+
 function generateSystemdService() {
   const bin = getBinaryPath()
   const workDir = getWorkDir()
@@ -71,7 +76,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${workDir}
-ExecStart=${bin} run
+ExecStart=${bin} ${__filename}
 Restart=always
 RestartSec=5
 KillMode=process
@@ -118,12 +123,14 @@ const serviceManager = {
     console.log('[*] 正在后台启动 ServerWatch 服务...')
     const bin = getBinaryPath()
     const outFd = fs.openSync(LOG_FILE, 'a')
+    const spawnArgs = getSpawnArgs()
     
-    // 使用 node 真正的后台分离进程启动
-    const child = spawn(bin, ['run'], {
+    // 使用 node 真正的后台分离进程启动 (精准传递 pkg 内置虚拟路径，彻底规避 Cannot find module 错误)
+    const child = spawn(bin, spawnArgs, {
       cwd: getWorkDir(),
       detached: true,
-      stdio: ['ignore', outFd, outFd]
+      stdio: ['ignore', outFd, outFd],
+      env: Object.assign({}, process.env, { SERVERWATCH_DAEMON: '1' })
     })
     
     child.unref()
