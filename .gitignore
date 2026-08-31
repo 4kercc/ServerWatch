@@ -11,6 +11,8 @@ pids
 *.db
 *.db-journal
 config.json
+deploy_remote.py
+server/utils/deploy_remote.py
 
 # Build & binary outputs
 serverwatch-linux
