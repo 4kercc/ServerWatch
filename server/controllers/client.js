@@ -303,6 +303,7 @@ module.exports = {
     // 3. 全新服务器：自动登记为待认领嗅探节点 (合并安装阶段缓存的地理位置元数据)
     const meta = pendingMeta[srcIp] || {}
     delete pendingMeta[srcIp]
+    const curNow = Date.now()
     await service.createNode({
       id: shortid.generate(),
       label: snapshot.hostname || snapshot.os_name || ('待认领 ' + srcIp),
@@ -314,6 +315,7 @@ module.exports = {
       discovered: true,
       online: true,
       installed: false,
+      time_response: curNow,
       snapshot
     })
     ctx.body = 'OK'

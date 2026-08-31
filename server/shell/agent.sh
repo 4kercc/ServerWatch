@@ -168,17 +168,17 @@ function load (){
 
   time=$(date +%s)
   stat=($(cat /proc/stat 2>/dev/null | head -n1 | sed 's/[^0-9 ]*//g' | sed 's/^ *//'))
-  cpu=$((${stat[0]}+${stat[1]}+${stat[2]}+${stat[3]}))
-  io=$((${stat[3]}+${stat[4]}))
-  idle=${stat[3]}
+  cpu=$((${stat[0]:-0}+${stat[1]:-0}+${stat[2]:-0}+${stat[3]:-0}))
+  io=$((${stat[3]:-0}+${stat[4]:-0}))
+  idle=${stat[3]:-0}
 
   if [ -e "$SW_DIR/data.log" ]; then
     data=($(cat "$SW_DIR/data.log" 2>/dev/null))
-    interval=$(($time-${data[0]}))
+    interval=$(($time-${data[0]:-0}))
     if [ "$interval" -gt 0 ]; then
-      cpu_gap=$(($cpu-${data[1]}))
-      io_gap=$(($io-${data[2]}))
-      idle_gap=$(($idle-${data[3]}))
+      cpu_gap=$(($cpu-${data[1]:-0}))
+      io_gap=$(($io-${data[2]:-0}))
+      idle_gap=$(($idle-${data[3]:-0}))
 
       if [[ $cpu_gap > "0" ]]; then
         load_cpu=$(((1000*($cpu_gap-$idle_gap)/$cpu_gap+5)/10))
@@ -188,12 +188,12 @@ function load (){
         load_io=$(((1000*($io_gap-$idle_gap)/$io_gap+5)/10))
       fi
 
-      if [[ $rx > ${data[4]} ]]; then
-        rx_gap=$((($rx-${data[4]})/$interval))
+      if [[ $rx > ${data[4]:-0} ]]; then
+        rx_gap=$((($rx-${data[4]:-0})/$interval))
       fi
 
-      if [[ $tx > ${data[5]} ]]; then
-        tx_gap=$((($tx-${data[5]})/$interval))
+      if [[ $tx > ${data[5]:-0} ]]; then
+        tx_gap=$((($tx-${data[5]:-0})/$interval))
       fi
     fi
   fi
@@ -220,11 +220,12 @@ function update ()
   # 服务端按源 IP 自动归档；管理员认领后推送响应将下发正式 TOKEN，本脚本自动切换到托管通道
   if [ "${token[0]}" = "DISCOVER" ]; then
     dkey="${token[1]}"
+    data_payload="$(payload)"
     resp=""
-    if [ -n "$(command -v curl)" ]; then
-      resp=$(curl -s --max-time 15 -d "key=${dkey}&data=$(payload)" -k "__PUSH_HOST__" 2>/dev/null)
-    else
-      resp=$(wget -qO- -T 15 --post-data "key=${dkey}&data=$(payload)" --no-check-certificate "__PUSH_HOST__" 2>/dev/null)
+    if type curl >/dev/null 2>&1; then
+      resp=$(curl -s --max-time 15 --data "key=${dkey}&data=${data_payload}" -k "__PUSH_HOST__" 2>/dev/null)
+    elif type wget >/dev/null 2>&1; then
+      resp=$(wget -qO- -T 15 --post-data "key=${dkey}&data=${data_payload}" --no-check-certificate "__PUSH_HOST__" 2>/dev/null)
     fi
 
     case "$resp" in
@@ -235,10 +236,10 @@ function update ()
           echo "$ntoken" > "$SW_DIR/token.log.sw" && mv -f "$SW_DIR/token.log.sw" "$SW_DIR/token.log"
           echo "token switched, syncing via managed channel..." > "$SW_DIR/agent.log"
           # 立即以正式 Token 向托管通道补报一次，实现零中断切换
-          if [ -n "$(command -v curl)" ]; then
-            curl -s --max-time 15 -d "token=${ntoken}&data=$(payload)" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
-          else
-            wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "token=${ntoken}&data=$(payload)" --no-check-certificate "__UPDATE_HOST__"
+          if type curl >/dev/null 2>&1; then
+            curl -s --max-time 15 --data "token=${ntoken}&data=${data_payload}" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
+          elif type wget >/dev/null 2>&1; then
+            wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "token=${ntoken}&data=${data_payload}" --no-check-certificate "__UPDATE_HOST__"
           fi
         fi
         ;;
@@ -250,12 +251,13 @@ function update ()
   fi
 
   # ============ 常规托管模式 ============
-  data_post="token=${token[0]}&data=$(payload)"
+  data_payload="$(payload)"
+  data_post="token=${token[0]}&data=${data_payload}"
 
   # 上传数据 (优先 curl，备用 wget)
-  if [ -n "$(command -v curl)" ]; then
-    curl -s --max-time 15 -d "$data_post" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
-  else
+  if type curl >/dev/null 2>&1; then
+    curl -s --max-time 15 --data "$data_post" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
+  elif type wget >/dev/null 2>&1; then
     wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "$data_post" --no-check-certificate "__UPDATE_HOST__"
   fi
 }
