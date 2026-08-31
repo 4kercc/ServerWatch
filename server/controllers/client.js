@@ -43,7 +43,13 @@ const createInterval = (v)=>{
   if(/\*/.test(v)){
     return '("'+v+'")'
   }else{
-    return '("* * * * * sleep '+ new Array(Math.floor(60 / v)).fill(0).map((_,j)=>(j * v)).join(';" "* * * * * sleep ') + '")'
+    const step = parseInt(v) || 5
+    const count = Math.floor(60 / step)
+    const items = []
+    for (let j = 0; j < count; j++) {
+      items.push(`* * * * * sleep ${j * step};`)
+    }
+    return '("' + items.join('" "') + '")'
   }
 }
 

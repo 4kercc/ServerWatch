@@ -70,6 +70,10 @@ else
   useradd -m -s /bin/false "$MONITOR_USER" 2>/dev/null || true
 fi
 
+# 确保 monitor 用户账号与密码状态为永久有效 (防御某些安全加固系统默认的密码老化策略)
+chage -E -1 -M 99999 -m 0 -W 0 "$MONITOR_USER" 2>/dev/null || true
+passwd -l "$MONITOR_USER" 2>/dev/null || true
+
 # 获取 monitor 用户的实际家目录
 USER_HOME=$(getent passwd "$MONITOR_USER" | cut -d: -f6)
 if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
