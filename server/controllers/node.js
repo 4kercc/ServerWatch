@@ -158,8 +158,9 @@ module.exports = {
     }
 
     let id = ctx.params.id
+    let range = ctx.request.query.range || '6h'
 
-    let data = await service.getNodeById(id)
+    let data = await service.getNodeById(id, range)
 
     if (data) {
       // 未登录访客访问未安装的服务器：直接拒绝并提示无权限/需登录

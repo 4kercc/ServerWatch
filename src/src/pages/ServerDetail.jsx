@@ -71,9 +71,9 @@ export default function ServerDetail() {
     setRawHistory((prev) => [...prev, snap].slice(-MAX_HISTORY_POINTS))
   }
 
-  const fetchDetail = async () => {
+  const fetchDetail = async (range = timeRange, isInitial = false) => {
     try {
-      const res = await http.get(`/api/node/${id}`)
+      const res = await http.get(`/api/node/${id}?range=${range}`)
       if (res && res.status === 403) {
         setErrorMsg(res.message || '未授权访问')
         return
@@ -93,7 +93,7 @@ export default function ServerDetail() {
         setErrorMsg('该节点尚未接入，请先以管理员身份登录')
       }
     } finally {
-      if (isMounted.current) setLoading(false)
+      if (isMounted.current && isInitial) setLoading(false)
     }
   }
 
@@ -111,7 +111,8 @@ export default function ServerDetail() {
 
   useEffect(() => {
     isMounted.current = true
-    fetchDetail()
+    setLoading(true)
+    fetchDetail(timeRange, true)
 
     const timer = setInterval(() => {
       tickLatest()
@@ -122,6 +123,12 @@ export default function ServerDetail() {
       clearInterval(timer)
     }
   }, [id])
+
+  // 切换时间跨度时，动态拉取该时间段对应的历史时序数据 (极速毫秒级响应)
+  const handleRangeChange = (range) => {
+    setTimeRange(range)
+    fetchDetail(range, false)
+  }
 
   // 根据当前选择的时间窗口 (1小时 / 6小时 / 24小时 / 7天) 计算过滤后的时序数据
   const history = useMemo(() => {
@@ -305,9 +312,53 @@ export default function ServerDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32 text-muted-foreground gap-3">
-        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
-        <span>正在读取主机详情与时序指标...</span>
+      <div className="space-y-6 animate-pulse">
+        {/* 顶部标题栏骨架 */}
+        <div className="flex items-center justify-between border-b border-border/60 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-muted/60"></div>
+            <div className="space-y-2">
+              <div className="h-5 w-40 bg-muted/80 rounded"></div>
+              <div className="h-3 w-64 bg-muted/50 rounded"></div>
+            </div>
+          </div>
+          <div className="h-8 w-24 bg-muted/60 rounded-lg"></div>
+        </div>
+
+        {/* 顶部硬件概况卡片骨架 */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4 space-y-2">
+              <div className="h-3 w-16 bg-muted/60 rounded"></div>
+              <div className="h-5 w-24 bg-muted/80 rounded"></div>
+            </div>
+          ))}
+        </div>
+
+        {/* 核心指标与进程列表骨架 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5 space-y-3">
+            <div className="h-4 w-32 bg-muted/70 rounded mb-4"></div>
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-10 bg-muted/40 rounded-lg"></div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <div className="h-4 w-28 bg-muted/70 rounded mb-4"></div>
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-8 bg-muted/40 rounded"></div>
+            ))}
+          </div>
+        </div>
+
+        {/* 折线图网格骨架 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-5 h-64 bg-muted/20"></div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -488,7 +539,7 @@ export default function ServerDetail() {
           <div className="flex items-center justify-end">
             <div className="inline-flex bg-muted/60 p-1 rounded-lg border border-border text-xs font-medium shadow-sm">
               <button
-                onClick={() => setTimeRange('1h')}
+                onClick={() => handleRangeChange('1h')}
                 className={`px-3.5 py-1.5 rounded-md transition cursor-pointer ${
                   timeRange === '1h'
                     ? 'bg-card text-foreground font-semibold shadow-sm'
@@ -498,7 +549,7 @@ export default function ServerDetail() {
                 1 小时
               </button>
               <button
-                onClick={() => setTimeRange('6h')}
+                onClick={() => handleRangeChange('6h')}
                 className={`px-3.5 py-1.5 rounded-md transition cursor-pointer ${
                   timeRange === '6h'
                     ? 'bg-card text-foreground font-semibold shadow-sm'
@@ -508,7 +559,7 @@ export default function ServerDetail() {
                 6 小时
               </button>
               <button
-                onClick={() => setTimeRange('24h')}
+                onClick={() => handleRangeChange('24h')}
                 className={`px-3.5 py-1.5 rounded-md transition cursor-pointer ${
                   timeRange === '24h'
                     ? 'bg-card text-foreground font-semibold shadow-sm'
@@ -518,7 +569,7 @@ export default function ServerDetail() {
                 24 小时
               </button>
               <button
-                onClick={() => setTimeRange('7d')}
+                onClick={() => handleRangeChange('7d')}
                 className={`px-3.5 py-1.5 rounded-md transition cursor-pointer ${
                   timeRange === '7d'
                     ? 'bg-card text-foreground font-semibold shadow-sm'
