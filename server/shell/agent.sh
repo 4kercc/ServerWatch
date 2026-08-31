@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/bin
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/bin:$PATH
 
 # 智能判断工作目录：优先 monitor 用户的隔离目录
 if [ -f "$HOME/.serverwatch/token.log" ]; then
@@ -222,10 +222,10 @@ function update ()
     dkey="${token[1]}"
     data_payload="$(payload)"
     resp=""
-    if type curl >/dev/null 2>&1; then
-      resp=$(curl -s --max-time 15 --data "key=${dkey}&data=${data_payload}" -k "__PUSH_HOST__" 2>/dev/null)
-    elif type wget >/dev/null 2>&1; then
-      resp=$(wget -qO- -T 15 --post-data "key=${dkey}&data=${data_payload}" --no-check-certificate "__PUSH_HOST__" 2>/dev/null)
+    if command -v curl >/dev/null 2>&1; then
+      resp=$(curl -s --max-time 15 -d "key=${dkey}&data=${data_payload}" -k "__PUSH_HOST__")
+    elif command -v wget >/dev/null 2>&1; then
+      resp=$(wget -qO- -T 15 --post-data "key=${dkey}&data=${data_payload}" --no-check-certificate "__PUSH_HOST__")
     fi
 
     case "$resp" in
@@ -236,9 +236,9 @@ function update ()
           echo "$ntoken" > "$SW_DIR/token.log.sw" && mv -f "$SW_DIR/token.log.sw" "$SW_DIR/token.log"
           echo "token switched, syncing via managed channel..." > "$SW_DIR/agent.log"
           # 立即以正式 Token 向托管通道补报一次，实现零中断切换
-          if type curl >/dev/null 2>&1; then
-            curl -s --max-time 15 --data "token=${ntoken}&data=${data_payload}" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
-          elif type wget >/dev/null 2>&1; then
+          if command -v curl >/dev/null 2>&1; then
+            curl -s --max-time 15 -d "token=${ntoken}&data=${data_payload}" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
+          elif command -v wget >/dev/null 2>&1; then
             wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "token=${ntoken}&data=${data_payload}" --no-check-certificate "__UPDATE_HOST__"
           fi
         fi
@@ -255,9 +255,9 @@ function update ()
   data_post="token=${token[0]}&data=${data_payload}"
 
   # 上传数据 (优先 curl，备用 wget)
-  if type curl >/dev/null 2>&1; then
-    curl -s --max-time 15 --data "$data_post" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
-  elif type wget >/dev/null 2>&1; then
+  if command -v curl >/dev/null 2>&1; then
+    curl -s --max-time 15 -d "$data_post" -k "__UPDATE_HOST__" > "$SW_DIR/agent.log" 2>&1
+  elif command -v wget >/dev/null 2>&1; then
     wget -q -o /dev/null -O "$SW_DIR/agent.log" -T 15 --post-data "$data_post" --no-check-certificate "__UPDATE_HOST__"
   fi
 }
