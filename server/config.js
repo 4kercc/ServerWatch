@@ -20,7 +20,21 @@ var cfg = {
   "port": 51221,
   "domain": "",
   "ssl": false,
-  "guest_mode": true // 默认开启访客模式
+  "guest_mode": true, // 默认开启访客模式
+  "alert": {
+    "fail_count": 3,
+    "offline_duration": 100,
+    "silence_duration": 1440,
+    "tg_enabled": false,
+    "tg_token": "",
+    "tg_chat_id": "",
+    "smtp_enabled": false,
+    "smtp_host": "",
+    "smtp_port": 465,
+    "smtp_user": "",
+    "smtp_pass": "",
+    "smtp_to": ""
+  }
 }
 
 var app, handler
@@ -54,6 +68,37 @@ function init(instance){
       }
       if (!cfg.discover_key) {
         cfg.discover_key = generateRandomString(16)
+      }
+      if (!cfg.alert || typeof cfg.alert !== 'object') {
+        cfg.alert = {
+          fail_count: 3,
+          offline_duration: 100,
+          silence_duration: 1440,
+          tg_enabled: false,
+          tg_token: "",
+          tg_chat_id: "",
+          smtp_enabled: false,
+          smtp_host: "",
+          smtp_port: 465,
+          smtp_user: "",
+          smtp_pass: "",
+          smtp_to: ""
+        }
+      } else {
+        cfg.alert = Object.assign({
+          fail_count: 3,
+          offline_duration: 100,
+          silence_duration: 1440,
+          tg_enabled: false,
+          tg_token: "",
+          tg_chat_id: "",
+          smtp_enabled: false,
+          smtp_host: "",
+          smtp_port: 465,
+          smtp_user: "",
+          smtp_pass: "",
+          smtp_to: ""
+        }, cfg.alert)
       }
       fs.writeFileSync(config_path, JSON.stringify(cfg, null, 2))
     } catch(e) {}
@@ -131,6 +176,12 @@ async function save(d){
   }
   if (!d.discover_key && cfg.discover_key) {
     d.discover_key = cfg.discover_key
+  }
+  // 保持原有 SMTP 授权码 (若提交时为空则保留原密码)
+  if (d.alert && cfg.alert) {
+    if (!d.alert.smtp_pass && cfg.alert.smtp_pass) {
+      d.alert.smtp_pass = cfg.alert.smtp_pass
+    }
   }
 
   let str = JSON.stringify(d, null, 2)

@@ -118,5 +118,11 @@ if (!isDaemon && command === 'ssl') {
   discoverService.sweepExpired()
   setInterval(() => discoverService.sweepExpired(), 10 * 60 * 1000)
 
+  // 上下线告警巡检守护：每 10 秒执行一次防抖心跳检测与告警分发
+  const notifyService = require('./utils/notify')
+  setInterval(() => {
+    notifyService.checkNodesAlert().catch(e => console.error('[Notify Daemon Error]', e))
+  }, 10000)
+
   module.exports = app
 }

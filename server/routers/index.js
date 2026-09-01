@@ -25,6 +25,8 @@ router.post('/api/node/:id/remove', authorize.check, node.remove)
 router.get('/api/node/:id/remove', authorize.check, node.remove)
 router.get('/api/setting', authorize.check, account.setting)
 router.post('/api/setting', authorize.check, account.update)
+router.post('/api/notify/test-tg', authorize.check, account.testTelegram)
+router.post('/api/notify/test-email', authorize.check, account.testEmail)
 
 // 3.1 自动发现中心 (管理员专属：嗅探节点列表 / 认领 / 忽略 / 封禁 / 解封 / 密钥重置)
 router.get('/api/discover', authorize.check, discover.info)

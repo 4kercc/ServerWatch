@@ -19,5 +19,7 @@ const routers = router
 
     .get('/setting' , account.setting)
     .post('/setting' , account.update)
+    .post('/notify/test-tg', account.testTelegram)
+    .post('/notify/test-email', account.testEmail)
 
 module.exports = routers
