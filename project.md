@@ -155,7 +155,7 @@ ServerWatch/
 
 ## 5. 快速启动与部署指南 (Deployment)
 
-### 5.1 服务端命令行运维管理 (CLI ��制)
+### 5.1 服务端命令行运维管理 (CLI 控制)
 单文件程序内置完整的守护进程与 systemd 服务生命周期管理工具，支持以下常用运维指令：
 
 ```bash
@@ -201,7 +201,7 @@ chmod +x serverwatch-linux
   7. **自动化 Let's Encrypt SSL 与域名 HTTPS**：支持 `./serverwatch-linux ssl <domain> start` 自动化 DNS 预校验、ECC 证书签发、51221 端口 HTTPS 切换与 60 天自动续期。
   8. **安全沙箱隔离探针**：探针安装逻辑升级为自动创建禁止登录独立用户 `monitor` (`nologin`)，探针与数据上报限制在独立沙箱 crontab 运行。
   9. **多平台单文件二进制发布**：成功构建并发布 Linux x64 (`serverwatch-linux`)、Linux ARM64 (`serverwatch-linux-arm64`) 与 Windows x64 (`serverwatch-win-x64.exe`)。
-  10. **高清演示视频入库与发布**：将系统演示视频集成至 `assets/demo.mp4`，在 `README.md` 中嵌入展���，并发布至 GitHub Release v2.0.6 资产列表。
+  10. **高清演示视频入库与发布**：将系统演示视频集成至 `assets/demo.mp4`，在 `README.md` 中嵌入展示，并发布至 GitHub Release v2.0.6 资产列表。
   11. **自动发现中心 (零接触嗅探接入)**：新增全局嗅探密钥与 `/client/push/:key` 免 Token 推送通道；批量执行一条安装命令即可让任意多台服务器按源 IP 自动归档到发现列表；支持认领设置参数、可选专属密钥自动同步（探针自动换发 Token 无缝切换托管通道）或纯推送 IP 分流模式；agent.sh 升级为嗅探/托管双通道架构并采集主机名；管理员侧提供发现列表、认领弹窗、忽略与密钥重置；端到端联调 38 项断言全部通过。
   12. **嗅探节点生命周期与来源 IP 封禁**：待认领服务器 7 天无人认领自动消失并封禁来源 IP；新增 banned_ips 持久化封禁体系、手动封禁/解封接口与管理端封禁列表卡片，嗅探安装/脚本下发/推送三通道全量拦截封禁 IP；巡检幂等且不影响已认领节点。
   13. **SPA 通配路由与深层页面直接刷新修复**：后端 Koa 显式注册 `/discover` 并新增通配正则兜底 `^(?!/(api|client)/).*$`，彻底解决未匹配前端深层路由在浏览器直接刷新 (F5) 时报 404 Not Found 的问题。
