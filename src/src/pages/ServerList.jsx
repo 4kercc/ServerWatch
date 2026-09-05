@@ -24,7 +24,10 @@ import {
   Trash2,
   Settings2,
   DollarSign,
-  Calendar
+  Calendar,
+  ArrowDown,
+  ArrowUp,
+  Network
 } from 'lucide-react'
 
 export default function ServerList({ onStatsUpdate }) {
@@ -126,7 +129,9 @@ export default function ServerList({ onStatsUpdate }) {
     const loadArr = (snap.load || '0.00 0.00 0.00').split(' ')
     const load1 = loadArr[0] || '0.00'
 
-    const netSpeed = (parseInt(snap.rx_gap) || 0) + (parseInt(snap.tx_gap) || 0)
+    const rxSpeed = parseInt(snap.rx_gap) || 0
+    const txSpeed = parseInt(snap.tx_gap) || 0
+    const netSpeed = rxSpeed + txSpeed
 
     // 智能到期时间与剩余天数/进度分析
     let expireInfo = null
@@ -194,6 +199,8 @@ export default function ServerList({ onStatsUpdate }) {
       cpuUsage,
       ioUsage,
       load1,
+      rxSpeedText: `${formatByte(rxSpeed)}/s`,
+      txSpeedText: `${formatByte(txSpeed)}/s`,
       netSpeedText: `${formatByte(netSpeed)}/s`,
       uptimeText: snap.uptime ? formatTime(snap.uptime) : '00:00:00',
       expireInfo
@@ -345,88 +352,44 @@ export default function ServerList({ onStatsUpdate }) {
                     </div>
                   </div>
 
-                  {/* 国旗 + 网络与地理信息 */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-                    <CountryFlag location={node.location || node.isp || ''} />
-                    {node.ip ? (
-                      <span className="font-mono bg-muted/70 px-2 py-0.5 rounded text-foreground/90 font-medium">
-                        {node.ip}
-                      </span>
-                    ) : null}
-                    {(node.location || node.isp) && (
-                      <span className="truncate max-w-[170px]">
-                        {[node.location, node.isp].filter(Boolean).join(' · ')}
+                  {/* 国旗 + 网络与地理信息 + 价格 */}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <CountryFlag location={node.location || node.isp || ''} />
+                      {node.ip ? (
+                        <span className="font-mono bg-muted/70 px-2 py-0.5 rounded text-foreground/90 font-medium">
+                          {node.ip}
+                        </span>
+                      ) : null}
+                      {(node.location || node.isp) && (
+                        <span className="truncate max-w-[160px]">
+                          {[node.location, node.isp].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                    </div>
+                    {node.price && (
+                      <span className="font-mono text-xs font-bold text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1 flex-shrink-0">
+                        <DollarSign className="h-3 w-3" />
+                        {node.price}
                       </span>
                     )}
                   </div>
-
-                  {/* 核心亮点：醒目的到期时间与价格横幅 (剩余天数大字/到期日期/进度条) */}
-                  {(node.price || metrics.expireInfo) && (
-                    <div className="mb-3 bg-muted/30 border border-border/70 rounded-lg p-2.5 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                          <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                          <span className="font-semibold text-foreground font-mono">
-                            {node.price || '未设置价格'}
-                          </span>
-                        </div>
-                        {metrics.expireInfo && (
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[11px] px-2 py-0.5 rounded-full border ${metrics.expireInfo.badgeClass}`}>
-                              {metrics.expireInfo.badgeText}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 到期日期与平滑进度条 */}
-                      {metrics.expireInfo && (
-                        <div>
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              到期日: <strong className="font-mono text-foreground font-normal">{metrics.expireInfo.dateStr}</strong>
-                            </span>
-                            <span className="font-mono font-medium">
-                              {metrics.expireInfo.isOverdue 
-                                ? <span className="text-red-500">已截止</span>
-                                : <span className={metrics.expireInfo.isUrgent ? 'text-red-400 font-bold' : metrics.expireInfo.isWarn ? 'text-amber-400 font-bold' : 'text-emerald-500'}>
-                                    {metrics.expireInfo.daysLeft} 天后
-                                  </span>
-                              }
-                            </span>
-                          </div>
-                          <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all duration-500 ${
-                                metrics.expireInfo.isOverdue
-                                  ? 'bg-red-500'
-                                  : metrics.expireInfo.isUrgent
-                                  ? 'bg-red-500'
-                                  : metrics.expireInfo.isWarn
-                                  ? 'bg-amber-500'
-                                  : 'bg-emerald-500'
-                              }`}
-                              style={{ width: `${Math.min(100, metrics.expireInfo.progressPercent)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                {/* 主机指标网格 (CPU / 内存 / 磁盘 3 维度进度条) */}
+                {/* 主机综合指标看板 (严格对齐用户布局：第1行 CPU/内存/磁盘 3卡片，第2行 流量/到期时间 2卡片) */}
                 {node.installed ? (
                   <div className="space-y-3 pt-3 border-t border-border/60">
                     
-                    {/* CPU & 内存 & 磁盘 3 栏并排展示 */}
+                    {/* 第 1 行：CPU、内存、磁盘 (3 栏并排卡片) */}
                     <div className="grid grid-cols-3 gap-2.5 text-xs">
-                      {/* CPU */}
-                      <div>
-                        <div className="flex justify-between text-muted-foreground mb-1">
-                          <span>CPU</span>
-                          <span className="font-mono font-medium text-foreground">{metrics.cpuUsage}%</span>
+                      {/* CPU 卡片 */}
+                      <div className="bg-muted/40 border border-border/60 rounded-lg p-2.5 space-y-1.5 shadow-xs">
+                        <div className="flex justify-between items-center text-muted-foreground">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Cpu className="h-3 w-3 text-purple-400" />
+                            CPU
+                          </span>
+                          <span className="font-mono font-bold text-foreground">{metrics.cpuUsage}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                           <div
@@ -438,11 +401,14 @@ export default function ServerList({ onStatsUpdate }) {
                         </div>
                       </div>
 
-                      {/* 内存 */}
-                      <div>
-                        <div className="flex justify-between text-muted-foreground mb-1">
-                          <span>内存</span>
-                          <span className="font-mono font-medium text-foreground">{metrics.ramPercent}%</span>
+                      {/* 内存卡片 */}
+                      <div className="bg-muted/40 border border-border/60 rounded-lg p-2.5 space-y-1.5 shadow-xs">
+                        <div className="flex justify-between items-center text-muted-foreground">
+                          <span className="flex items-center gap-1 font-medium">
+                            <HardDrive className="h-3 w-3 text-emerald-400" />
+                            内存
+                          </span>
+                          <span className="font-mono font-bold text-foreground">{metrics.ramPercent}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                           <div
@@ -454,11 +420,14 @@ export default function ServerList({ onStatsUpdate }) {
                         </div>
                       </div>
 
-                      {/* 磁盘 */}
-                      <div>
-                        <div className="flex justify-between text-muted-foreground mb-1">
-                          <span>磁盘</span>
-                          <span className="font-mono font-medium text-foreground">{metrics.diskPercent}%</span>
+                      {/* 磁盘卡片 */}
+                      <div className="bg-muted/40 border border-border/60 rounded-lg p-2.5 space-y-1.5 shadow-xs">
+                        <div className="flex justify-between items-center text-muted-foreground">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Layers className="h-3 w-3 text-blue-400" />
+                            磁盘
+                          </span>
+                          <span className="font-mono font-bold text-foreground">{metrics.diskPercent}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                           <div
@@ -471,14 +440,84 @@ export default function ServerList({ onStatsUpdate }) {
                       </div>
                     </div>
 
-                    {/* IO & 负载与网络吞吐 */}
-                    <div className="flex items-center justify-between text-xs font-mono pt-1 text-muted-foreground">
-                      <div className="flex items-center gap-3">
-                        <span>负载: <strong className="text-foreground font-normal">{metrics.load1}</strong></span>
-                        <span>IO: <strong className="text-foreground font-normal">{metrics.ioUsage}%</strong></span>
+                    {/* 第 2 行：网络流量 与 到期时间 (2 栏并排卡片) */}
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      {/* 网络流量卡片 */}
+                      <div className="bg-muted/40 border border-border/60 rounded-lg p-2.5 flex flex-col justify-between shadow-xs">
+                        <div className="flex justify-between items-center text-muted-foreground mb-1">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Network className="h-3.5 w-3.5 text-cyan-400" />
+                            网络速率
+                          </span>
+                          <span className="font-mono text-cyan-400 font-bold">{metrics.netSpeedText}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground pt-0.5">
+                          <span className="text-emerald-500 flex items-center gap-0.5">
+                            <ArrowDown className="h-3 w-3" />
+                            {metrics.rxSpeedText}
+                          </span>
+                          <span className="text-blue-500 flex items-center gap-0.5">
+                            <ArrowUp className="h-3 w-3" />
+                            {metrics.txSpeedText}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-blue-400">
-                        {metrics.netSpeedText}
+
+                      {/* 到期时间卡片 */}
+                      <div className="bg-muted/40 border border-border/60 rounded-lg p-2.5 flex flex-col justify-between shadow-xs">
+                        <div className="flex justify-between items-center text-muted-foreground mb-1">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Calendar className="h-3.5 w-3.5 text-amber-400" />
+                            到期时间
+                          </span>
+                          {metrics.expireInfo ? (
+                            <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${metrics.expireInfo.badgeClass}`}>
+                              {metrics.expireInfo.badgeText}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/60">长期有效</span>
+                          )}
+                        </div>
+
+                        {metrics.expireInfo ? (
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1 font-mono">
+                              <span>{metrics.expireInfo.dateStr}</span>
+                              <span className={metrics.expireInfo.isOverdue ? 'text-red-500 font-bold' : metrics.expireInfo.isUrgent ? 'text-red-400 font-bold' : metrics.expireInfo.isWarn ? 'text-amber-400 font-bold' : 'text-emerald-500 font-semibold'}>
+                                {metrics.expireInfo.isOverdue ? '已过期' : `${metrics.expireInfo.daysLeft}天后`}
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-500 ${
+                                  metrics.expireInfo.isOverdue
+                                    ? 'bg-red-500'
+                                    : metrics.expireInfo.isUrgent
+                                    ? 'bg-red-500'
+                                    : metrics.expireInfo.isWarn
+                                    ? 'bg-amber-500'
+                                    : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.min(100, metrics.expireInfo.progressPercent)}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-muted-foreground/60 font-mono py-1">
+                            未设定到期预警
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 底部小字：负载与 IO 统计 */}
+                    <div className="flex items-center justify-between text-[11px] font-mono pt-1 text-muted-foreground">
+                      <div className="flex items-center gap-3">
+                        <span>系统负载: <strong className="text-foreground font-normal">{metrics.load1}</strong></span>
+                        <span>磁盘 IO: <strong className="text-foreground font-normal">{metrics.ioUsage}%</strong></span>
+                      </div>
+                      <div>
+                        {node.installed && <span className="text-emerald-500 text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded">探针正常运行</span>}
                       </div>
                     </div>
 
