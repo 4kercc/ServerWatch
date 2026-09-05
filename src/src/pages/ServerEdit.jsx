@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import http from '../lib/http'
-import { Server, ArrowLeft, Save, Database, Clock, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Server, ArrowLeft, Save, Database, Clock, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Calendar } from 'lucide-react'
 
 export default function ServerEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [form, setForm] = useState({
     label: '',
+    price: '',
+    expire_date: '',
     update_interval: 5,
     recordable: '1',
     record_interval: 60,
@@ -25,8 +27,15 @@ export default function ServerEdit() {
         const res = await http.get(`/api/node/${id}/base`)
         if (res && (res.status === 0 || res.data)) {
           const d = res.data || {}
+          let dateStr = ''
+          if (d.expire_time && d.expire_time > 0) {
+            const dateObj = new Date(d.expire_time)
+            dateStr = dateObj.toISOString().split('T')[0]
+          }
           setForm({
             label: d.label || '',
+            price: d.price || '',
+            expire_date: dateStr,
             update_interval: d.update_interval || 5,
             recordable: d.recordable ? '1' : '0',
             record_interval: d.record_interval || 60,
@@ -55,8 +64,15 @@ export default function ServerEdit() {
     setSuccess(false)
 
     try {
+      let expireTimestamp = 0
+      if (form.expire_date) {
+        expireTimestamp = new Date(form.expire_date).getTime()
+      }
+
       const payload = {
         label: form.label.trim(),
+        price: form.price.trim(),
+        expire_time: expireTimestamp,
         update_interval: parseInt(form.update_interval) || 5,
         recordable: form.recordable === '1' ? 1 : 0,
         record_interval: parseInt(form.record_interval) || 60,
@@ -103,7 +119,7 @@ export default function ServerEdit() {
         <div>
           <h1 className="text-xl font-bold text-foreground">修改节点配置</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            更新主机名称、采集频率与历史入库策略
+            更新主机名称、价格周期、到期时间与历史入库策略
           </p>
         </div>
       </div>
@@ -138,6 +154,36 @@ export default function ServerEdit() {
             onChange={(e) => setForm({ ...form, label: e.target.value })}
             className="w-full px-3.5 py-2 text-sm bg-background border border-border rounded-lg placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary transition"
           />
+        </div>
+
+        {/* 价格与到期时间配置 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+              服务器价格 / 周期 (可选)
+            </label>
+            <input
+              type="text"
+              placeholder="例如：¥35/月 或 $12/年"
+              value={form.price}
+              onChange={(e) => setForm({ ...form, price: e.target.value })}
+              className="w-full px-3.5 py-2 text-sm bg-background border border-border rounded-lg placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary transition"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              到期时间 (提前 7天/3天 自动通知)
+            </label>
+            <input
+              type="date"
+              value={form.expire_date}
+              onChange={(e) => setForm({ ...form, expire_date: e.target.value })}
+              className="w-full px-3.5 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary transition"
+            />
+          </div>
         </div>
 
         {/* 探针采集频率 */}

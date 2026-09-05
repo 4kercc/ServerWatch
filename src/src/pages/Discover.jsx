@@ -146,6 +146,8 @@ export default function Discover() {
       label: node.hostname || node.label || '',
       location: node.location || '',
       isp: node.isp || '',
+      price: '',
+      expire_date: '',
       update_interval: 5,
       record_interval: 60,
       sync_token: true
@@ -158,11 +160,18 @@ export default function Discover() {
     if (!claimTarget) return
     setClaiming(true)
     try {
+      let expireTimestamp = 0
+      if (claimForm.expire_date) {
+        expireTimestamp = new Date(claimForm.expire_date).getTime()
+      }
+
       const res = await http.post('/api/discover/claim', {
         ip: claimTarget.ip,
         label: claimForm.label,
         location: claimForm.location,
         isp: claimForm.isp,
+        price: (claimForm.price || '').trim(),
+        expire_time: expireTimestamp,
         update_interval: parseInt(claimForm.update_interval) || 5,
         record_interval: parseInt(claimForm.record_interval) || 60,
         sync_token: claimForm.sync_token
@@ -554,6 +563,28 @@ export default function Discover() {
                   placeholder="如：ColoCrossing"
                   value={claimForm.isp}
                   onChange={(e) => setClaimForm({ ...claimForm, isp: e.target.value })}
+                  className="w-full px-3.5 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary transition"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">价格 / 周期 (可选)</label>
+                <input
+                  type="text"
+                  placeholder="如：¥35/月 或 $12/年"
+                  value={claimForm.price}
+                  onChange={(e) => setClaimForm({ ...claimForm, price: e.target.value })}
+                  className="w-full px-3.5 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary transition"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">到期时间 (可选)</label>
+                <input
+                  type="date"
+                  value={claimForm.expire_date}
+                  onChange={(e) => setClaimForm({ ...claimForm, expire_date: e.target.value })}
                   className="w-full px-3.5 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary transition"
                 />
               </div>

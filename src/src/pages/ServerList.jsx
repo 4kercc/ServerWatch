@@ -126,6 +126,23 @@ export default function ServerList({ onStatsUpdate }) {
 
     const netSpeed = (parseInt(snap.rx_gap) || 0) + (parseInt(snap.tx_gap) || 0)
 
+    // 到期时间计算
+    let expireBadge = null
+    if (node.expire_time && node.expire_time > 0) {
+      const msLeft = node.expire_time - Date.now()
+      const daysLeft = Math.ceil(msLeft / (1000 * 3600 * 24))
+      const dateStr = new Date(node.expire_time).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+      if (daysLeft < 0) {
+        expireBadge = { text: '已过期', color: 'bg-red-500/15 text-red-400 border-red-500/30' }
+      } else if (daysLeft <= 3) {
+        expireBadge = { text: `剩${daysLeft}天`, color: 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse' }
+      } else if (daysLeft <= 7) {
+        expireBadge = { text: `剩${daysLeft}天`, color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' }
+      } else {
+        expireBadge = { text: `${dateStr}到期`, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' }
+      }
+    }
+
     return {
       ramPercent,
       ramText: `${formatByte(ramUsage)} / ${formatByte(ramTotal)}`,
@@ -135,7 +152,8 @@ export default function ServerList({ onStatsUpdate }) {
       ioUsage,
       load1,
       netSpeedText: `${formatByte(netSpeed)}/s`,
-      uptimeText: snap.uptime ? formatTime(snap.uptime) : '00:00:00'
+      uptimeText: snap.uptime ? formatTime(snap.uptime) : '00:00:00',
+      expireBadge
     }
   }
 
@@ -284,18 +302,34 @@ export default function ServerList({ onStatsUpdate }) {
                     </div>
                   </div>
 
-                  {/* 国旗 + 网络与地理信息 */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-                    <CountryFlag location={node.location || node.isp || ''} />
-                    {node.ip ? (
-                      <span className="font-mono bg-muted/70 px-2 py-0.5 rounded text-foreground/90 font-medium">
-                        {node.ip}
-                      </span>
-                    ) : null}
+                  {/* 国旗 + 网络与地理信息 + 价格/到期 */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <CountryFlag location={node.location || node.isp || ''} />
+                      {node.ip ? (
+                        <span className="font-mono bg-muted/70 px-2 py-0.5 rounded text-foreground/90 font-medium">
+                          {node.ip}
+                        </span>
+                      ) : null}
+                    </div>
                     {(node.location || node.isp) && (
-                      <span className="truncate max-w-[180px]">
+                      <span className="truncate max-w-[130px]">
                         {[node.location, node.isp].filter(Boolean).join(' · ')}
                       </span>
+                    )}
+                    {(node.price || metrics.expireBadge) && (
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        {node.price && (
+                          <span className="font-mono text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                            {node.price}
+                          </span>
+                        )}
+                        {metrics.expireBadge && (
+                          <span className={`text-[10px] font-medium border px-1.5 py-0.5 rounded-md ${metrics.expireBadge.color}`}>
+                            {metrics.expireBadge.text}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -410,6 +444,7 @@ export default function ServerList({ onStatsUpdate }) {
               <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b border-border">
                 <tr>
                   <th className="px-5 py-3">主机 / 归属 / IP</th>
+                  <th className="px-5 py-3">价格 / 到期时间</th>
                   <th className="px-5 py-3">状态</th>
                   <th className="px-5 py-3">运行时间</th>
                   <th className="px-5 py-3">CPU 使用率</th>
@@ -439,6 +474,22 @@ export default function ServerList({ onStatsUpdate }) {
                         </div>
                         <div className="text-xs font-mono text-muted-foreground mt-0.5">
                           {node.ip || '未获取 IP'} {node.location ? `· ${node.location}` : ''}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col gap-1">
+                          {node.price ? (
+                            <span className="font-mono text-xs font-semibold text-emerald-500 dark:text-emerald-400">
+                              {node.price}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground/60">-</span>
+                          )}
+                          {metrics.expireBadge && (
+                            <span className={`inline-block text-[10px] font-medium border px-1.5 py-0.5 rounded-md w-fit ${metrics.expireBadge.color}`}>
+                              {metrics.expireBadge.text}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-5 py-3.5">

@@ -154,6 +154,13 @@ async function init() {
   try { db.run(`ALTER TABLE nodes ADD COLUMN sync_token INTEGER DEFAULT 0;`) } catch(e) {}
   try { db.run(`ALTER TABLE nodes ADD COLUMN hostname TEXT DEFAULT '';`) } catch(e) {}
 
+  // 节点价格与到期时间系统平滑升级列：
+  // price       TEXT    例如: "¥38/月" 或 "$12/年"
+  // expire_time INTEGER 毫秒时间戳或 0 表示未设置/长期有效
+  try { db.run(`ALTER TABLE nodes ADD COLUMN price TEXT DEFAULT '';`) } catch(e) {}
+  try { db.run(`ALTER TABLE nodes ADD COLUMN expire_time INTEGER DEFAULT 0;`) } catch(e) {}
+
+
   // 创建 index_id 索引
   try {
     db.run(`CREATE INDEX IF NOT EXISTS idx_nodes_index_id ON nodes(index_id);`)

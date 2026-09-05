@@ -425,10 +425,35 @@ export default function ServerDetail() {
                 {!data.installed ? '未安装脚本' : isOnline ? '在线' : '离线'}
               </span>
             </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 font-mono">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1 font-mono">
               <span>{data.ip || '0.0.0.0'}</span>
               {data.location && <span>· {data.location}</span>}
               {data.isp && <span>· {data.isp}</span>}
+              {data.price && (
+                <span className="text-emerald-500 dark:text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                  💰 {data.price}
+                </span>
+              )}
+              {data.expire_time && data.expire_time > 0 && (() => {
+                const msLeft = data.expire_time - Date.now()
+                const daysLeft = Math.ceil(msLeft / (1000 * 3600 * 24))
+                const dateStr = new Date(data.expire_time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                const isUrgent = daysLeft <= 3
+                const isWarn = daysLeft <= 7
+                return (
+                  <span className={`px-2 py-0.5 rounded-md border font-semibold ${
+                    daysLeft < 0
+                      ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                      : isUrgent
+                      ? 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse'
+                      : isWarn
+                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  }`}>
+                    ⏳ {dateStr} ({daysLeft < 0 ? '已过期' : `剩 ${daysLeft} 天`})
+                  </span>
+                )
+              })()}
             </div>
           </div>
         </div>

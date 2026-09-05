@@ -4,7 +4,7 @@ const nodemailer = require('nodemailer')
 const config = require('../config')
 const service = require('../models/node')
 
-// 告警节点状态机映射表: node_id -> { fail_count, offline_since, last_state, last_alert_time }
+// 告警节点状态机映射表: node_id -> { fail_count, offline_since, last_state, last_alert_time, notified_exp_7d, notified_exp_3d }
 const nodeAlertStates = new Map()
 
 // 发送 Telegram 消息
@@ -236,6 +236,54 @@ async function checkNodesAlert() {
         // 持续在线：重置失败计数与离线起始时间
         state.fail_count = 0
         state.offline_since = 0
+      }
+    }
+
+    // ================= 到期时间提前 7 天 / 3 天通知逻辑 =================
+    if (node.expire_time && node.expire_time > 0) {
+      const msLeft = node.expire_time - now
+      const daysLeft = msLeft / (1000 * 3600 * 24)
+      const expDateStr = new Date(node.expire_time).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+      const priceText = node.price ? ` (费用/价格: ${node.price})` : ''
+
+      // 1. 距离到期 <= 7 天 且 > 3 天：触发 7 天到期提醒 (只提醒 1 次)
+      if (daysLeft <= 7 && daysLeft > 3) {
+        if (!state.notified_exp_7d) {
+          state.notified_exp_7d = true
+          console.log(`[Notify] 触发服务器即将到期 7 天提醒: ${node.label} (${node.ip}) 到期日: ${expDateStr}`)
+          broadcastAlert(`【ServerWatch 续费提醒】主机即将到期: ${node.label} (${node.ip})`, {
+            title: '⏳ 服务器即将到期提醒 (7 天内)',
+            label: node.label,
+            ip: node.ip,
+            location: node.location,
+            type: '到期提醒 / 7 天预警',
+            isOffline: false,
+            message: `该主机将于 ${expDateStr} 到期${priceText}，剩余约 ${Math.ceil(daysLeft)} 天，请及时续费以防服务中断！`
+          })
+        }
+      }
+
+      // 2. 距离到期 <= 3 天 且 > 0 天：触发 3 天紧急到期提醒 (只提醒 1 次)
+      if (daysLeft <= 3 && daysLeft > 0) {
+        if (!state.notified_exp_3d) {
+          state.notified_exp_3d = true
+          console.log(`[Notify] 触发服务器即将到期 3 天紧急提醒: ${node.label} (${node.ip}) 到期日: ${expDateStr}`)
+          broadcastAlert(`【ServerWatch 紧急续费】主机即将到期: ${node.label} (${node.ip})`, {
+            title: '🚨 服务器即将到期预警 (3 天内)',
+            label: node.label,
+            ip: node.ip,
+            location: node.location,
+            type: '紧急续费 / 3 天预警',
+            isOffline: true,
+            message: `紧急通知：该主机将于 ${expDateStr} 到期${priceText}，仅剩约 ${Math.ceil(daysLeft)} 天，请尽快安排续费！`
+          })
+        }
+      }
+
+      // 若续费后到期时间更新延长至 7 天以上，重置提醒标志位
+      if (daysLeft > 7) {
+        state.notified_exp_7d = false
+        state.notified_exp_3d = false
       }
     }
   }

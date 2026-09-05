@@ -16,6 +16,8 @@ function parseNodeRow(row) {
     location: row.location,
     isp: row.isp,
     remark: row.remark,
+    price: row.price || '',
+    expire_time: row.expire_time ? parseInt(row.expire_time) : 0,
     installed: !!row.installed,
     online: !!row.online,
     discovered: !!row.discovered,
@@ -67,6 +69,8 @@ const node = {
       data.location || '',
       data.isp || '',
       data.remark || '',
+      data.price || '',
+      data.expire_time ? parseInt(data.expire_time) : 0,
       data.installed ? 1 : 0,
       data.online ? 1 : 0,
       data.time_response || 0,
@@ -84,11 +88,11 @@ const node = {
     ]
     sqlite.execute(`
       INSERT INTO nodes (
-        id, index_id, label, ip, location, isp, remark, installed, online,
+        id, index_id, label, ip, location, isp, remark, price, expire_time, installed, online,
         time_response, time_record, update_interval, record_interval,
         record_limit, recordable, discovered, push_source, sync_token, hostname,
         snapshot, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, params)
     data.index_id = nextIndex
     return data
@@ -208,6 +212,8 @@ const node = {
         location = ?,
         isp = ?,
         remark = ?,
+        price = ?,
+        expire_time = ?,
         installed = ?,
         online = ?,
         time_response = ?,
@@ -228,6 +234,8 @@ const node = {
       merged.location || '',
       merged.isp || '',
       merged.remark || '',
+      merged.price !== undefined ? String(merged.price) : (current.price || ''),
+      merged.expire_time !== undefined ? parseInt(merged.expire_time) || 0 : (current.expire_time || 0),
       merged.installed ? 1 : 0,
       merged.online ? 1 : 0,
       merged.time_response || 0,

@@ -84,6 +84,8 @@ module.exports = {
       location: form.location !== undefined ? form.location : pending.location,
       isp: form.isp !== undefined ? form.isp : pending.isp,
       remark: form.remark !== undefined ? form.remark : '嗅探自动发现',
+      price: form.price !== undefined ? String(form.price) : (pending.price || ''),
+      expire_time: form.expire_time ? parseInt(form.expire_time) : (pending.expire_time || 0),
       discovered: false,
       push_source: true,
       sync_token: syncToken,
