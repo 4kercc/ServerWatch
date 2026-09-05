@@ -519,7 +519,72 @@ export default function ServerDetail() {
         <div className="space-y-6">
           
           {/* 硬件信息概览卡片 */}
-          <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+          <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+            
+            {/* 顶部突出横幅：服务器价格与续费到期时间 */}
+            {(data.price || (data.expire_time && data.expire_time > 0)) && (
+              <div className="bg-muted/40 border border-border/80 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+                    <DollarSign className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">服务器费用 / 续费周期</div>
+                    <div className="text-base font-bold text-foreground font-mono mt-0.5">
+                      {data.price || '未设置价格'}
+                    </div>
+                  </div>
+                </div>
+
+                {data.expire_time && data.expire_time > 0 && (() => {
+                  const now = Date.now()
+                  const msLeft = data.expire_time - now
+                  const daysLeft = Math.ceil(msLeft / (1000 * 3600 * 24))
+                  const dateStr = new Date(data.expire_time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                  const isOverdue = daysLeft < 0
+                  const isUrgent = daysLeft <= 3 && !isOverdue
+                  const isWarn = daysLeft <= 7 && !isOverdue
+                  const progressPct = isOverdue ? 0 : Math.min(100, Math.max(10, Math.round((daysLeft / 30) * 100)))
+
+                  return (
+                    <div className="w-full sm:w-72 bg-background border border-border/80 rounded-lg p-2.5 space-y-1.5 shadow-xs">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground flex items-center gap-1 font-mono">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                          {dateStr} 到期
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                          isOverdue
+                            ? 'bg-red-500/15 text-red-500 border-red-500/30'
+                            : isUrgent
+                            ? 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse'
+                            : isWarn
+                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                            : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                        }`}>
+                          {isOverdue ? `已过期 ${Math.abs(daysLeft)} 天` : daysLeft === 0 ? '今日到期' : `剩余 ${daysLeft} 天`}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 ${
+                            isOverdue
+                              ? 'bg-red-500'
+                              : isUrgent
+                              ? 'bg-red-500'
+                              : isWarn
+                              ? 'bg-amber-500'
+                              : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+
             <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
               <Server className="h-4 w-4 text-muted-foreground" />
               主机系统与硬件概况

@@ -126,20 +126,61 @@ export default function ServerList({ onStatsUpdate }) {
 
     const netSpeed = (parseInt(snap.rx_gap) || 0) + (parseInt(snap.tx_gap) || 0)
 
-    // 到期时间计算
-    let expireBadge = null
+    // 智能到期时间与剩余天数/进度分析
+    let expireInfo = null
     if (node.expire_time && node.expire_time > 0) {
-      const msLeft = node.expire_time - Date.now()
+      const now = Date.now()
+      const msLeft = node.expire_time - now
       const daysLeft = Math.ceil(msLeft / (1000 * 3600 * 24))
-      const dateStr = new Date(node.expire_time).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+      const dateStr = new Date(node.expire_time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+      
+      let badgeText = ''
+      let badgeClass = ''
+      let progressPercent = 100 // 剩余进度比例 (0~100)
+      let isOverdue = false
+      let isUrgent = false
+      let isWarn = false
+
       if (daysLeft < 0) {
-        expireBadge = { text: '已过期', color: 'bg-red-500/15 text-red-400 border-red-500/30' }
+        isOverdue = true
+        progressPercent = 0
+        badgeText = `已过期 ${Math.abs(daysLeft)} 天`
+        badgeClass = 'bg-red-500/15 text-red-500 border-red-500/30'
+      } else if (daysLeft === 0) {
+        isUrgent = true
+        progressPercent = 5
+        badgeText = '今日到期'
+        badgeClass = 'bg-red-500/20 text-red-500 border-red-500/40 animate-pulse font-bold'
       } else if (daysLeft <= 3) {
-        expireBadge = { text: `剩${daysLeft}天`, color: 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse' }
+        isUrgent = true
+        progressPercent = Math.max(10, Math.round((daysLeft / 30) * 100))
+        badgeText = `仅剩 ${daysLeft} 天`
+        badgeClass = 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse font-semibold'
       } else if (daysLeft <= 7) {
-        expireBadge = { text: `剩${daysLeft}天`, color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' }
+        isWarn = true
+        progressPercent = Math.max(20, Math.round((daysLeft / 30) * 100))
+        badgeText = `剩余 ${daysLeft} 天`
+        badgeClass = 'bg-amber-500/15 text-amber-400 border-amber-500/30 font-semibold'
+      } else if (daysLeft <= 30) {
+        progressPercent = Math.max(25, Math.round((daysLeft / 30) * 100))
+        badgeText = `剩余 ${daysLeft} 天`
+        badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
       } else {
-        expireBadge = { text: `${dateStr}到期`, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' }
+        const months = Math.floor(daysLeft / 30)
+        const remDays = daysLeft % 30
+        badgeText = remDays > 0 ? `剩 ${months}月${remDays}天` : `剩 ${months} 个月`
+        badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+      }
+
+      expireInfo = {
+        daysLeft,
+        dateStr,
+        badgeText,
+        badgeClass,
+        progressPercent,
+        isOverdue,
+        isUrgent,
+        isWarn
       }
     }
 
@@ -153,7 +194,7 @@ export default function ServerList({ onStatsUpdate }) {
       load1,
       netSpeedText: `${formatByte(netSpeed)}/s`,
       uptimeText: snap.uptime ? formatTime(snap.uptime) : '00:00:00',
-      expireBadge
+      expireInfo
     }
   }
 
@@ -302,36 +343,75 @@ export default function ServerList({ onStatsUpdate }) {
                     </div>
                   </div>
 
-                  {/* 国旗 + 网络与地理信息 + 价格/到期 */}
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-4">
-                    <div className="flex items-center gap-1.5">
-                      <CountryFlag location={node.location || node.isp || ''} />
-                      {node.ip ? (
-                        <span className="font-mono bg-muted/70 px-2 py-0.5 rounded text-foreground/90 font-medium">
-                          {node.ip}
-                        </span>
-                      ) : null}
-                    </div>
+                  {/* 国旗 + 网络与地理信息 */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                    <CountryFlag location={node.location || node.isp || ''} />
+                    {node.ip ? (
+                      <span className="font-mono bg-muted/70 px-2 py-0.5 rounded text-foreground/90 font-medium">
+                        {node.ip}
+                      </span>
+                    ) : null}
                     {(node.location || node.isp) && (
-                      <span className="truncate max-w-[130px]">
+                      <span className="truncate max-w-[170px]">
                         {[node.location, node.isp].filter(Boolean).join(' · ')}
                       </span>
                     )}
-                    {(node.price || metrics.expireBadge) && (
-                      <div className="flex items-center gap-1.5 ml-auto">
-                        {node.price && (
-                          <span className="font-mono text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
-                            {node.price}
+                  </div>
+
+                  {/* 核心亮点：醒目的到期时间与价格横幅 (剩余天数大字/到期日期/进度条) */}
+                  {(node.price || metrics.expireInfo) && (
+                    <div className="mb-3 bg-muted/30 border border-border/70 rounded-lg p-2.5 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                          <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
+                          <span className="font-semibold text-foreground font-mono">
+                            {node.price || '未设置价格'}
                           </span>
-                        )}
-                        {metrics.expireBadge && (
-                          <span className={`text-[10px] font-medium border px-1.5 py-0.5 rounded-md ${metrics.expireBadge.color}`}>
-                            {metrics.expireBadge.text}
-                          </span>
+                        </div>
+                        {metrics.expireInfo && (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[11px] px-2 py-0.5 rounded-full border ${metrics.expireInfo.badgeClass}`}>
+                              {metrics.expireInfo.badgeText}
+                            </span>
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
+
+                      {/* 到期日期与平滑进度条 */}
+                      {metrics.expireInfo && (
+                        <div>
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              到期日: <strong className="font-mono text-foreground font-normal">{metrics.expireInfo.dateStr}</strong>
+                            </span>
+                            <span className="font-mono font-medium">
+                              {metrics.expireInfo.isOverdue 
+                                ? <span className="text-red-500">已截止</span>
+                                : <span className={metrics.expireInfo.isUrgent ? 'text-red-400 font-bold' : metrics.expireInfo.isWarn ? 'text-amber-400 font-bold' : 'text-emerald-500'}>
+                                    {metrics.expireInfo.daysLeft} 天后
+                                  </span>
+                              }
+                            </span>
+                          </div>
+                          <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-500 ${
+                                metrics.expireInfo.isOverdue
+                                  ? 'bg-red-500'
+                                  : metrics.expireInfo.isUrgent
+                                  ? 'bg-red-500'
+                                  : metrics.expireInfo.isWarn
+                                  ? 'bg-amber-500'
+                                  : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${Math.min(100, metrics.expireInfo.progressPercent)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* 主机指标网格 (CPU / 内存 / 磁盘 3 维度进度条) */}
@@ -479,16 +559,22 @@ export default function ServerList({ onStatsUpdate }) {
                       <td className="px-5 py-3.5">
                         <div className="flex flex-col gap-1">
                           {node.price ? (
-                            <span className="font-mono text-xs font-semibold text-emerald-500 dark:text-emerald-400">
+                            <span className="font-mono text-xs font-bold text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
+                              <DollarSign className="h-3 w-3" />
                               {node.price}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground/60">-</span>
                           )}
-                          {metrics.expireBadge && (
-                            <span className={`inline-block text-[10px] font-medium border px-1.5 py-0.5 rounded-md w-fit ${metrics.expireBadge.color}`}>
-                              {metrics.expireBadge.text}
-                            </span>
+                          {metrics.expireInfo && (
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-md border ${metrics.expireInfo.badgeClass}`}>
+                                {metrics.expireInfo.badgeText}
+                              </span>
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                ({metrics.expireInfo.dateStr})
+                              </span>
+                            </div>
                           )}
                         </div>
                       </td>
