@@ -5,7 +5,7 @@ import { CountryFlag } from '../components/CountryFlag'
 import {
   Radar, RefreshCw, Copy, Check, ClipboardPaste, ChevronDown, ChevronUp,
   MonitorCheck, Trash2, X, AlertCircle, CheckCircle2, KeyRound, Terminal, Server,
-  ShieldBan, ShieldOff, Timer
+  ShieldBan, ShieldOff, Timer, DollarSign, Calendar
 } from 'lucide-react'
 
 // 强壮的跨浏览器复制实现 (兼容 HTTP 非安全上下文)

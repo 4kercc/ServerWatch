@@ -20,7 +20,9 @@ import {
   RefreshCw,
   Zap,
   Network,
-  Lock
+  Lock,
+  DollarSign,
+  Calendar
 } from 'lucide-react'
 
 // 注册 Chart.js 核心组件

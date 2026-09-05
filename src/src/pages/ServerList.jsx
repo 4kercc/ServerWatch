@@ -22,7 +22,9 @@ import {
   List as ListIcon,
   Edit,
   Trash2,
-  Settings2
+  Settings2,
+  DollarSign,
+  Calendar
 } from 'lucide-react'
 
 export default function ServerList({ onStatsUpdate }) {
